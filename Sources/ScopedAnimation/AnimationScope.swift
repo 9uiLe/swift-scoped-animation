@@ -75,6 +75,7 @@ public struct AnimationScope<Content: View>: View {
           stamp: namedStamp
         )
       )
+      .animationScopeDebugBoundary(stamp: namedStamp)
   }
 }
 
@@ -86,8 +87,11 @@ private struct AnimationScopeCoreModifier: ViewModifier {
   @ViewBuilder
   func body(content: Content) -> some View {
     let stampedContent = content.transaction { transaction in
-      if transaction.animation != nil, transaction.animationScopeStamp == nil {
-        transaction.animationScopeStamp = stamp.withAnimation(transaction.animation)
+      if let animation = transaction.animation {
+        let currentStamp = transaction.animationScopeStamp
+        if currentStamp == nil || currentStamp?.animation != animation {
+          transaction.animationScopeStamp = stamp.withAnimation(animation)
+        }
       }
     }
 

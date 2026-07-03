@@ -10,14 +10,34 @@ extension View {
   /// LegacyDashboard()
   ///   .animationBarrier()
   /// ```
-  public func animationBarrier() -> some View {
-    modifier(AnimationBarrierModifier())
+  /// - Parameter warnsOnLeaks: Pass `false` to silence the debug-only leak warning.
+  public func animationBarrier(warnsOnLeaks: Bool = true) -> some View {
+    modifier(AnimationBarrierModifier(warnsOnLeaks: warnsOnLeaks))
   }
 }
 
 struct AnimationBarrierModifier: ViewModifier {
+  #if DEBUG
+    let warnsOnLeaks: Bool
+    @State private var warningSite = AnimationScopeRuntimeWarning.Site("animationBarrier")
+
+    init(warnsOnLeaks: Bool) {
+      self.warnsOnLeaks = warnsOnLeaks
+    }
+  #else
+    init(warnsOnLeaks: Bool) {}
+  #endif
+
   func body(content: Content) -> some View {
     content.transaction { transaction in
+      #if DEBUG
+        if warnsOnLeaks, transaction.animation != nil, transaction.animationScopeStamp == nil {
+          AnimationScopeRuntimeWarning.report(
+            .barrierLeak(site: warningSite)
+          )
+        }
+      #endif
+
       transaction.animation = nil
     }
   }

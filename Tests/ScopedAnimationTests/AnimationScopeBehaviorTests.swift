@@ -213,6 +213,188 @@
       XCTAssertGreaterThan(recorder.matching("lazy-row").count, 0)
       XCTAssertFalse(recorder.hasAnimation("lazy-row"))
     }
+
+    #if DEBUG
+      func testDetectAnimationLeaksReportsUnscopedAnimationTransactions() {
+        let model = ProbeModel()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(LeakDetectorProbeView(model: model))
+            pumpRunLoop()
+
+            withAnimation(.linear(duration: 0.2)) {
+              model.outer.toggle()
+            }
+            pumpRunLoop()
+          }
+        )
+
+        XCTAssertEqual(warningRecorder.warnings.count, 1)
+        XCTAssertEqual(warningRecorder.warnings.first?.title, "Unscoped animation transaction")
+      }
+
+      func testDetectAnimationLeaksIgnoresStampedAnimationTransactions() {
+        let model = ProbeModel()
+        let proxyBox = ProxyBox()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(StampedLeakDetectorProbeView(model: model, proxyBox: proxyBox))
+            pumpRunLoop()
+
+            guard let proxy = proxyBox.proxy else {
+              XCTFail("Expected proxy to be captured")
+              return
+            }
+
+            proxy.animate {
+              model.inner.toggle()
+            }
+            pumpRunLoop()
+          }
+        )
+
+        XCTAssertTrue(warningRecorder.warnings.isEmpty)
+      }
+
+      func testDetectAnimationLeaksDebouncesSameSiteWarnings() {
+        let model = ProbeModel()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          debounceInterval: 10,
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(LeakDetectorProbeView(model: model))
+            pumpRunLoop()
+
+            withAnimation(.linear(duration: 0.2)) {
+              model.outer.toggle()
+            }
+            pumpRunLoop()
+
+            withAnimation(.linear(duration: 0.2)) {
+              model.outer.toggle()
+            }
+            pumpRunLoop()
+          }
+        )
+
+        XCTAssertEqual(warningRecorder.warnings.count, 1)
+      }
+
+      func testAnimationBarrierSensorReportsOnlyUnstampedAnimationTransactions() {
+        let model = ProbeModel()
+        let recorder = TransactionRecorder()
+        let proxyBox = ProxyBox()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(BarrierSensorProbeView(model: model, warnsOnLeaks: true))
+            pumpRunLoop()
+
+            withAnimation(.linear(duration: 0.2)) {
+              model.outer.toggle()
+            }
+            pumpRunLoop()
+
+            _ = host(
+              BarrierBelowProxyProbeView(model: model, recorder: recorder, proxyBox: proxyBox))
+            pumpRunLoop()
+
+            guard let proxy = proxyBox.proxy else {
+              XCTFail("Expected proxy to be captured")
+              return
+            }
+
+            proxy.animate {
+              model.inner.toggle()
+            }
+            pumpRunLoop()
+          }
+        )
+
+        XCTAssertEqual(warningRecorder.warnings.count, 1)
+        XCTAssertEqual(
+          warningRecorder.warnings.first?.title,
+          "Animation barrier stripped an unscoped transaction"
+        )
+      }
+
+      func testAnimationBarrierSensorCanBeDisabled() {
+        let model = ProbeModel()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(BarrierSensorProbeView(model: model, warnsOnLeaks: false))
+            pumpRunLoop()
+
+            withAnimation(.linear(duration: 0.2)) {
+              model.outer.toggle()
+            }
+            pumpRunLoop()
+          }
+        )
+
+        XCTAssertTrue(warningRecorder.warnings.isEmpty)
+      }
+    #endif
+
+    func testValueDrivenScopeRestampsWhenAnimationChangesInsideStampedTransaction() throws {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      let proxyBox = ProxyBox()
+      let innerAnimation = Animation.easeInOut(duration: 0.45)
+      _ = host(
+        ValueAttributionProbeView(
+          model: model,
+          recorder: recorder,
+          proxyBox: proxyBox,
+          innerAnimation: innerAnimation
+        )
+      )
+      pumpRunLoop()
+
+      guard let proxy = proxyBox.proxy else {
+        XCTFail("Expected proxy to be captured")
+        return
+      }
+
+      recorder.clear()
+      proxy.animate(.linear(duration: 0.2)) {
+        model.inner.toggle()
+      }
+      pumpRunLoop()
+      recorder.dump("M2_VALUE_ATTRIBUTION")
+
+      XCTAssertTrue(recorder.hasAnimation("attribution-child"))
+      XCTAssertTrue(recorder.hasStampName("attribution-child", "inner-value"))
+      XCTAssertTrue(
+        recorder.hasStampAnimationDescription(
+          "attribution-child",
+          String(describing: innerAnimation)
+        )
+      )
+    }
   }
 
   @MainActor
@@ -232,6 +414,25 @@
     var outerProxy: AnimationScopeProxy?
     var innerProxy: AnimationScopeProxy?
   }
+
+  #if DEBUG
+    private final class WarningRecorder: @unchecked Sendable {
+      private let lock = NSLock()
+      private var storage: [AnimationScopeWarning] = []
+
+      var warnings: [AnimationScopeWarning] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+      }
+
+      func record(_ warning: AnimationScopeWarning) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(warning)
+      }
+    }
+  #endif
 
   @MainActor
   private struct S7RestoreProbeView: View {
@@ -265,7 +466,7 @@
         Text("explicit-barrier")
           .opacity(model.outer ? 0.2 : 1)
           .transaction { recorder.record("explicit-barrier", $0) }
-          .animationBarrier()
+          .animationBarrier(warnsOnLeaks: false)
 
         Text("implicit-control")
           .opacity(model.inner ? 0.2 : 1)
@@ -275,7 +476,7 @@
         Text("implicit-barrier")
           .opacity(model.inner ? 0.2 : 1)
           .transaction { recorder.record("implicit-barrier", $0) }
-          .animationBarrier()
+          .animationBarrier(warnsOnLeaks: false)
           .animation(.linear(duration: 0.2), value: model.inner)
       }
     }
@@ -411,7 +612,64 @@
         }
       }
       .frame(height: 300)
-      .animationBarrier()
+      .animationBarrier(warnsOnLeaks: false)
+    }
+  }
+
+  @MainActor
+  private struct LeakDetectorProbeView: View {
+    @ObservedObject var model: ProbeModel
+
+    var body: some View {
+      Text("leak-detector")
+        .opacity(model.outer ? 0.2 : 1)
+        .detectAnimationLeaks()
+    }
+  }
+
+  @MainActor
+  private struct StampedLeakDetectorProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let proxyBox: ProxyBox
+
+    var body: some View {
+      AnimationScope(.linear(duration: 0.2), name: "leak-scope") { scope in
+        Text("stamped-leak-detector")
+          .opacity(model.inner ? 0.2 : 1)
+          .detectAnimationLeaks()
+          .onAppear { proxyBox.proxy = scope }
+      }
+    }
+  }
+
+  @MainActor
+  private struct BarrierSensorProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let warnsOnLeaks: Bool
+
+    var body: some View {
+      Text("barrier-sensor")
+        .opacity(model.outer ? 0.2 : 1)
+        .animationBarrier(warnsOnLeaks: warnsOnLeaks)
+    }
+  }
+
+  @MainActor
+  private struct ValueAttributionProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+    let proxyBox: ProxyBox
+    let innerAnimation: Animation
+
+    var body: some View {
+      AnimationScope(.linear(duration: 0.2), name: "outer-proxy") { outerScope in
+        AnimationScope(innerAnimation, value: model.inner, name: "inner-value") {
+          Text("attribution")
+            .opacity(model.inner ? 0.2 : 1)
+            .transaction { recorder.record("attribution-child", $0) }
+            .onAppear { proxyBox.proxy = outerScope }
+        }
+      }
     }
   }
 #endif
