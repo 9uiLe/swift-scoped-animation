@@ -40,8 +40,13 @@ extension View {
     }
 
     var color: Color {
-      let hash = abs(id.uuidString.hashValue % 360)
-      return Color(hue: Double(hash) / 360, saturation: 0.82, brightness: 0.94)
+      var uuid = id.uuid
+      let hue = withUnsafeBytes(of: &uuid) { bytes in
+        bytes.enumerated().reduce(0) { partial, next in
+          (partial + Int(next.element) * (next.offset + 1)) % 360
+        }
+      }
+      return Color(hue: Double(hue) / 360, saturation: 0.82, brightness: 0.94)
     }
   }
 
