@@ -7,6 +7,22 @@
   // lifetime while SwiftUI transactions are pumped on the main actor.
   @MainActor
   final class AnimationScopeBehaviorTests: XCTestCase {
+    func testS7TransactionHookCanRestoreAnimationAfterStrip() {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      _ = host(S7RestoreProbeView(model: model, recorder: recorder))
+      pumpRunLoop()
+
+      recorder.clear()
+      withAnimation(.linear(duration: 0.2)) {
+        model.inner.toggle()
+      }
+      pumpRunLoop()
+      recorder.dump("R1_S7_RESTORE")
+
+      XCTAssertTrue(recorder.hasAnimation("s7-child"))
+    }
+
     func testBarrierStripsExplicitAndImplicitIncomingAnimations() {
       let model = ProbeModel()
       let recorder = TransactionRecorder()
@@ -97,7 +113,6 @@
       pumpRunLoop()
       recorder.dump("M1_NESTED_OUTER")
       XCTAssertFalse(recorder.hasAnimation("nested-inner-child"))
-      XCTAssertFalse(recorder.hasStamp("nested-inner-child"))
 
       recorder.clear()
       innerProxy.animate {
@@ -107,6 +122,78 @@
       recorder.dump("M1_NESTED_INNER")
       XCTAssertTrue(recorder.hasAnimation("nested-inner-child"))
       XCTAssertTrue(recorder.hasStamp("nested-inner-child"))
+    }
+
+    func testInnerProxyDoesNotAnimateOuterScopeRegion() throws {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      let proxyBox = NestedProxyBox()
+      _ = host(OuterRegionProbeView(model: model, recorder: recorder, proxyBox: proxyBox))
+      pumpRunLoop()
+
+      guard let innerProxy = proxyBox.innerProxy else {
+        XCTFail("Expected inner proxy to be captured")
+        return
+      }
+
+      recorder.clear()
+      innerProxy.animate {
+        model.inner.toggle()
+      }
+      pumpRunLoop()
+      recorder.dump("R1_INNER_PROXY_OUTER_REGION")
+
+      XCTAssertFalse(recorder.hasAnimation("outer-region"))
+      XCTAssertTrue(recorder.hasAnimation("inner-region"))
+    }
+
+    func testProxyDrivenScopeWorksBelowAnimationBarrier() throws {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      let proxyBox = ProxyBox()
+      _ = host(BarrierBelowProxyProbeView(model: model, recorder: recorder, proxyBox: proxyBox))
+      pumpRunLoop()
+
+      guard let proxy = proxyBox.proxy else {
+        XCTFail("Expected proxy to be captured")
+        return
+      }
+
+      recorder.clear()
+      proxy.animate {
+        model.inner.toggle()
+      }
+      pumpRunLoop()
+      recorder.dump("R1_BARRIER_BELOW_PROXY")
+
+      XCTAssertTrue(recorder.hasAnimation("barrier-proxy-child"))
+      XCTAssertTrue(recorder.hasStamp("barrier-proxy-child"))
+    }
+
+    func testProxyAnimationOverrideIsUsedWhenBoundaryRestores() throws {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      let proxyBox = ProxyBox()
+      let overrideAnimation = Animation.easeInOut(duration: 0.73)
+      _ = host(OverrideProxyProbeView(model: model, recorder: recorder, proxyBox: proxyBox))
+      pumpRunLoop()
+
+      guard let proxy = proxyBox.proxy else {
+        XCTFail("Expected proxy to be captured")
+        return
+      }
+
+      recorder.clear()
+      proxy.animate(overrideAnimation) {
+        model.inner.toggle()
+      }
+      pumpRunLoop()
+      recorder.dump("R1_PROXY_OVERRIDE")
+
+      XCTAssertTrue(recorder.hasAnimation("override-child"))
+      XCTAssertTrue(
+        recorder.hasAnimationDescription("override-child", String(describing: overrideAnimation))
+      )
     }
 
     func testLazyVStackRowsRespectBarrier() {
@@ -144,6 +231,24 @@
   private final class NestedProxyBox {
     var outerProxy: AnimationScopeProxy?
     var innerProxy: AnimationScopeProxy?
+  }
+
+  @MainActor
+  private struct S7RestoreProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+
+    var body: some View {
+      Text("s7")
+        .opacity(model.inner ? 0.2 : 1)
+        .transaction { recorder.record("s7-child", $0) }
+        .transaction { transaction in
+          transaction.animation = .linear(duration: 0.2)
+        }
+        .transaction { transaction in
+          transaction.animation = nil
+        }
+    }
   }
 
   @MainActor
@@ -226,6 +331,66 @@
               proxyBox.innerProxy = innerScope
             }
         }
+      }
+    }
+  }
+
+  @MainActor
+  private struct OuterRegionProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+    let proxyBox: NestedProxyBox
+
+    var body: some View {
+      AnimationScope(.linear(duration: 0.2)) { outerScope in
+        VStack {
+          Text("outer-region")
+            .opacity(model.inner ? 0.2 : 1)
+            .transaction { recorder.record("outer-region", $0) }
+
+          AnimationScope(.linear(duration: 0.2)) { innerScope in
+            Text("inner-region")
+              .opacity(model.inner ? 0.2 : 1)
+              .transaction { recorder.record("inner-region", $0) }
+              .onAppear {
+                proxyBox.outerProxy = outerScope
+                proxyBox.innerProxy = innerScope
+              }
+          }
+        }
+      }
+    }
+  }
+
+  @MainActor
+  private struct BarrierBelowProxyProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+    let proxyBox: ProxyBox
+
+    var body: some View {
+      AnimationScope(.linear(duration: 0.2)) { scope in
+        Text("barrier-proxy")
+          .opacity(model.inner ? 0.2 : 1)
+          .transaction { recorder.record("barrier-proxy-child", $0) }
+          .onAppear { proxyBox.proxy = scope }
+      }
+      .animationBarrier()
+    }
+  }
+
+  @MainActor
+  private struct OverrideProxyProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+    let proxyBox: ProxyBox
+
+    var body: some View {
+      AnimationScope(.linear(duration: 0.2)) { scope in
+        Text("override")
+          .opacity(model.inner ? 0.2 : 1)
+          .transaction { recorder.record("override-child", $0) }
+          .onAppear { proxyBox.proxy = scope }
       }
     }
   }

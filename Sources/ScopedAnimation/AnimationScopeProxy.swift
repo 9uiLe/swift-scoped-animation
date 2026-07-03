@@ -43,7 +43,7 @@ public struct AnimationScopeProxy {
   /// ```
   public func animate(_ animation: Animation, _ body: () -> Void) {
     var transaction = Transaction(animation: animation)
-    transaction.animationScopeStamp = stamp
+    transaction.animationScopeStamp = stamp.withAnimation(animation)
     withTransaction(transaction, body)
   }
 }

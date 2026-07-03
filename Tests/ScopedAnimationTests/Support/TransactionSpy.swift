@@ -13,13 +13,18 @@
     let sequence: Int
     let label: String
     let hasAnimation: Bool
+    let animationDescription: String?
     let stamp: AnimationScopeStamp?
+    let stampAnimationDescription: String?
     let disablesAnimations: Bool
 
     var description: String {
       let stampDescription = stamp == nil ? "nil" : "set"
+      let animationDescription = animationDescription ?? "nil"
+      let stampAnimationDescription = stampAnimationDescription ?? "nil"
       return "seq=\(sequence) label=\(label) animation=\(hasAnimation) "
-        + "stamp=\(stampDescription) disables=\(disablesAnimations)"
+        + "animationDescription=\(animationDescription) stamp=\(stampDescription) "
+        + "stampAnimationDescription=\(stampAnimationDescription) disables=\(disablesAnimations)"
     }
   }
 
@@ -35,7 +40,11 @@
           sequence: sequence,
           label: label,
           hasAnimation: transaction.animation != nil,
+          animationDescription: transaction.animation.map { String(describing: $0) },
           stamp: transaction.animationScopeStamp,
+          stampAnimationDescription: transaction.animationScopeStamp?.animation.map {
+            String(describing: $0)
+          },
           disablesAnimations: transaction.disablesAnimations
         )
       )
@@ -55,6 +64,10 @@
 
     func hasStamp(_ label: String) -> Bool {
       matching(label).contains { $0.stamp != nil }
+    }
+
+    func hasAnimationDescription(_ label: String, _ description: String) -> Bool {
+      matching(label).contains { $0.animationDescription == description }
     }
 
     func distinctStamps(_ label: String) -> Set<AnimationScopeStamp> {

@@ -1,14 +1,13 @@
-import Foundation
 import SwiftUI
 
 /// A structural boundary for SwiftUI animation.
 ///
-/// `AnimationScope` blocks animations from ancestors and then allows only the
+/// `AnimationScope` blocks animations from ancestors, then allows only
 /// animation created by the scope to affect its content.
 ///
 /// ```swift
 /// AnimationScope(.spring(duration: 0.3), value: isExpanded) {
-///     CardContent(isExpanded: isExpanded)
+///   CardContent(isExpanded: isExpanded)
 /// }
 /// ```
 public struct AnimationScope<Content: View>: View {
@@ -17,7 +16,6 @@ public struct AnimationScope<Content: View>: View {
   private let name: String?
   private let content: (AnimationScopeProxy) -> Content
 
-  @Environment(\.animationScopeBoundaryPath) private var parentBoundaryPath
   @State private var stamp = AnimationScopeStamp()
 
   /// Creates a value-driven animation scope.
@@ -27,7 +25,7 @@ public struct AnimationScope<Content: View>: View {
   ///
   /// ```swift
   /// AnimationScope(.smooth, value: isSelected) {
-  ///     SelectionIndicator(isSelected: isSelected)
+  ///   SelectionIndicator(isSelected: isSelected)
   /// }
   /// ```
   public init<Value: Equatable>(
@@ -48,10 +46,10 @@ public struct AnimationScope<Content: View>: View {
   ///
   /// ```swift
   /// AnimationScope(.snappy) { scope in
-  ///     CardContent()
-  ///         .onTapGesture {
-  ///             scope.animate { isExpanded.toggle() }
-  ///         }
+  ///   CardContent()
+  ///     .onTapGesture {
+  ///       scope.animate { isExpanded.toggle() }
+  ///     }
   /// }
   /// ```
   public init(
@@ -66,15 +64,10 @@ public struct AnimationScope<Content: View>: View {
   }
 
   public var body: some View {
-    let boundaryPath = parentBoundaryPath + [stamp.id]
-    let namedStamp =
-      stamp
-      .named(name)
-      .allowingBoundaries(boundaryPath)
+    let namedStamp = stamp.named(name)
     let proxy = AnimationScopeProxy(animation: animation, stamp: namedStamp)
 
     content(proxy)
-      .environment(\.animationScopeBoundaryPath, boundaryPath)
       .modifier(
         AnimationScopeCoreModifier(
           animation: animation,
@@ -94,7 +87,7 @@ private struct AnimationScopeCoreModifier: ViewModifier {
   func body(content: Content) -> some View {
     let stampedContent = content.transaction { transaction in
       if transaction.animation != nil, transaction.animationScopeStamp == nil {
-        transaction.animationScopeStamp = stamp
+        transaction.animationScopeStamp = stamp.withAnimation(transaction.animation)
       }
     }
 
@@ -125,16 +118,5 @@ struct AnyEquatable: Equatable {
 
   static func == (lhs: AnyEquatable, rhs: AnyEquatable) -> Bool {
     lhs.equals(rhs.value)
-  }
-}
-
-private enum AnimationScopeBoundaryPathKey: EnvironmentKey {
-  static let defaultValue: [UUID] = []
-}
-
-extension EnvironmentValues {
-  fileprivate var animationScopeBoundaryPath: [UUID] {
-    get { self[AnimationScopeBoundaryPathKey.self] }
-    set { self[AnimationScopeBoundaryPathKey.self] = newValue }
   }
 }

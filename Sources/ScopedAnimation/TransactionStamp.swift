@@ -4,24 +4,20 @@ import SwiftUI
 struct AnimationScopeStamp: Hashable, Sendable {
   let id: UUID
   let name: String?
-  private let allowedBoundaryIDs: Set<UUID>
+  let animation: Animation?
 
-  init(id: UUID = UUID(), name: String? = nil, allowedBoundaryIDs: Set<UUID> = []) {
+  init(id: UUID = UUID(), name: String? = nil, animation: Animation? = nil) {
     self.id = id
     self.name = name
-    self.allowedBoundaryIDs = allowedBoundaryIDs
+    self.animation = animation
   }
 
   func named(_ name: String?) -> AnimationScopeStamp {
-    AnimationScopeStamp(id: id, name: name, allowedBoundaryIDs: allowedBoundaryIDs)
+    AnimationScopeStamp(id: id, name: name, animation: animation)
   }
 
-  func allowingBoundaries(_ boundaryIDs: some Sequence<UUID>) -> AnimationScopeStamp {
-    AnimationScopeStamp(id: id, name: name, allowedBoundaryIDs: Set(boundaryIDs))
-  }
-
-  func isAllowed(through boundary: AnimationScopeStamp) -> Bool {
-    allowedBoundaryIDs.contains(boundary.id)
+  func withAnimation(_ animation: Animation?) -> AnimationScopeStamp {
+    AnimationScopeStamp(id: id, name: name, animation: animation)
   }
 
   static func == (lhs: AnimationScopeStamp, rhs: AnimationScopeStamp) -> Bool {
