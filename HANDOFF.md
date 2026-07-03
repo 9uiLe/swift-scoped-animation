@@ -78,8 +78,8 @@ AnimationScope(.snappy) { scope in
 セマンティクス(正確に実装すること):
 
 1. **流入遮断**: スコープ境界で祖先由来の transaction のアニメーションを除去する。外の `withAnimation` や implicit animation はスコープ内に届かない。
-2. **(A) 値駆動**: 内部的に `.animation(_:value:)` 相当。`value` の変化に起因する更新のみアニメーションし、その transaction にスコープの刻印を打つ。
-3. **(B) 明示駆動**: `scope.animate {}` は `withTransaction` で刻印付き transaction を作って body を実行する。
+2. **(A) 値駆動**: 内部的に `.animation(_:value:)` 相当。`value` の変化に起因する更新のみアニメーションし、その transaction にスコープの刻印を打つ。**刻印が届くのはスコープ内の子孫のみ**(downstream-only。Phase 0 S3 で確認)。スコープより上の観測点からこのアニメーションは見えない。
+3. **(B) 明示駆動**: `scope.animate {}` は `withTransaction` で刻印付き transaction を作って body を実行する。この刻印はツリー全体(ルートの観測点を含む)に到達する。
 4. **ネスト**: 内側のスコープが勝つ(内側の境界でも流入遮断が働く)。
 5. `.transition` はスコープ内の構造変化(if/switch)に対して期待通り動くこと(insertion/removal の transaction がスコープから供給される)。
 
@@ -101,10 +101,11 @@ LegacyDashboard()
 
 - 祖先由来の transaction からアニメーションを剥がす。「この先は静的」という宣言をレビューで一目で分かる形にする。
 - `AnimationScope` の流入遮断は内部的にこれと同一実装を共有する。
+- **DEBUG ではリークセンサーを兼ねる**: 剥がした transaction が「刻印なしのアニメーション付き」だった場合、runtime warning を発報する(刻印ありは外側スコープの正常なネストなので発報しない)。RELEASE では遮断のみ。オプトアウト引数を用意する。
 
 ### 4.3 重要な制約 — 正直に文書化すること
 
-**`withAnimation`(および proxy 外での状態変更)の波及は SwiftUI の原理上、完全には閉じ込められない。** 本ライブラリができるのは (a) 境界での流入遮断、(b) 刻印による出所追跡、(c) 刻印なしアニメーションの検出・警告、の 3 点。「封じ込め」ではなく「遮断 + 検出」。README・DocC でこのモデルを明確に説明する。誇張した瞬間に信頼を失う。
+**`withAnimation`(および proxy 外での状態変更)の波及は SwiftUI の原理上、完全には閉じ込められない。** 本ライブラリができるのは (a) 境界での流入遮断、(b) 刻印による出所追跡、(c) 刻印なしアニメーションの検出・警告、の 3 点。「封じ込め」ではなく「遮断 + 検出」。さらに検出には精度差がある(§5.1 の精度マトリクス)。README・DocC でこのモデルと限界を明確に説明する。誇張した瞬間に信頼を失う。
 
 ---
 
@@ -117,14 +118,23 @@ LegacyDashboard()
     var body: some Scene {
         WindowGroup {
             RootView()
-                .detectAnimationLeaks()   // DEBUG のみ有効。RELEASE では no-op
+                .detectAnimationLeaks()   // ルート推奨。任意のサブツリーにも置ける。DEBUG のみ有効
         }
     }
 }
 ```
 
-- 刻印のないアニメーション付き transaction がツリーを流れたら Xcode の runtime warning(紫の Issue)を発報する。メッセージには可能な範囲で発生源のヒントを含める。
-- 実装方針: ルートの `.transaction {}` フックで観測。頻度が高いので RELEASE では完全に消えること(`#if DEBUG` + inlinable no-op)。
+- 観測点を通過する「刻印なしのアニメーション付き transaction」を Xcode の runtime warning(紫の Issue)として発報する。メッセージには可能な範囲で発生源のヒントを含める。
+- **検出精度(Phase 0 S3/S4 実測に基づく。README / HowItWorks にもこの表を載せること)**:
+
+| リーク源 | ルートの検出器 | サブツリー検出器 / barrier センサー |
+|---|---|---|
+| 生の `withAnimation` / 刻印なし `withTransaction` | 検出できる(高信頼) | 検出できる |
+| スコープ外の生の `.animation(_:value:)` | **検出できない**(transaction が観測点より下で生成される) | 発生源より下流に観測点があれば検出できる |
+| スコープ由来(刻印あり) | 発報しない(正常) | 発報しない(正常) |
+
+- 生 `.animation(_:value:)` の盲点は三層で補う: (a) barrier センサー(§4.2)、(b) 疑わしいサブツリーへの `detectAnimationLeaks()` 設置、(c) Phase 2 の SwiftLint ルール(生 `.animation(` を静的に禁止)。この三層構造を README / HowItWorks で図解する。
+- 実装方針: `.transaction {}` フックで観測。フック呼び出し回数はサブツリー規模に比例する(S4 実測: 60 行 × 5 更新で 300 回)ため、**検出フックは粗い粒度(ルート・画面単位)に置く前提で設計し、行単位への自動設置は絶対にしない**。RELEASE では完全に消えること(`#if DEBUG` + inlinable no-op)。
 - 同一箇所からの連続発報はデバウンスする(ログ洪水はそれ自体が採用障壁)。
 
 ### 5.2 境界オーバーレイ
@@ -187,7 +197,12 @@ README では「performance guardrails」ではなく「scoping discipline that 
 
 ## 8. ロードマップ
 
-### Phase 0 — スパイク(最初にやる。コア API の go/no-go を決める)
+### Phase 0 — スパイク(✅ 完了 2026-07-03 / 判定: Go)
+
+結果: S1 ✓ / S2 ✓ / S3 条件付き / S4 条件付き / S5 条件付き / S6 ✓。詳細は `docs/spike-findings.md`。
+S3(刻印は downstream-only)と S4(ルート検出の盲点)の帰結は §4.1・§4.2・§5.1 に反映済み。S5 の List 行レベル検証はユニットホスティングでは観測不能だったため、Phase 1 の QA 項目に移管した(下記チェックリストと §10-5)。
+
+以下の検証マトリクスは記録として残す:
 
 このライブラリは SwiftUI の `Transaction` の未文書挙動に依存する。**本実装の前に、使い捨てコードで以下を検証し、`docs/spike-findings.md` に結果を書くこと。**
 
@@ -205,9 +220,12 @@ README では「performance guardrails」ではなく「scoping discipline that 
 ### Phase 1 — v0.1.0(コア)
 
 - [ ] `AnimationScope`(値駆動 + proxy 駆動)、`.animationBarrier()`、刻印
-- [ ] `detectAnimationLeaks()` + runtime warning 内製
+- [ ] `detectAnimationLeaks()`(ルート/サブツリー両対応)+ runtime warning 内製
+- [ ] `.animationBarrier()` の DEBUG リークセンサー(§4.2)
 - [ ] `animationScopeDebugOverlay()`
 - [ ] テスト(§9)
+- [ ] **List 検証(最優先の QA)**: サンプルアプリに検証画面を作り、(1) `AnimationScope` で `List` を包んだとき行コンテンツまでアニメーションが届くか、(2) barrier が行内へのアニメーション流入を遮断するか、(3) セル再利用(スクロールで画面外→復帰)後もスコープ挙動が維持されるか、を目視確認して `Examples/QA.md` に記録する。伝播しない場合は実装を進める前にメンテナへ報告し、合意の上で「`List` では行コンテンツの内側にスコープを置く」という使用制約として HowItWorks に文書化する
+- [ ] README / HowItWorks に検出精度マトリクス(§5.1)と三層の補完戦略を掲載
 - [ ] DocC 一式(§7 の 4 記事)
 - [ ] サンプルアプリ: Before/After 比較(生 `withAnimation` でリークする画面 → スコープ化した画面)、オーバーレイのデモ
 - [ ] CI(§AGENTS.md)、LICENSE、README、CONTRIBUTING、CHANGELOG、.spi.yml
@@ -226,7 +244,7 @@ README では「performance guardrails」ではなく「scoping discipline that 
 
 SwiftUI のアニメーションは直接テストできない。以下の 2 層で担保する:
 
-1. **Transaction spy テスト(主力)**: テスト専用の `.transaction {}` フックで、状態変更時にサブツリーへ流れた transaction(animation の有無・刻印の有無)を記録して assert する。`UIHostingController` にホストし、`@MainActor` でランループを回す。スコープの「遮断」「値駆動」「刻印」「バリア」はすべてこの方式で検証可能なはず(Phase 0 の S3/S4 で成立を確認)。
+1. **Transaction spy テスト(主力)**: テスト専用の `.transaction {}` フックで、状態変更時にサブツリーへ流れた transaction(animation の有無・刻印の有無)を記録して assert する。`UIHostingController` にホストし、`@MainActor` でランループを回す。スコープの「遮断」「値駆動」「刻印」「バリア」はすべてこの方式で検証可能(Phase 0 で成立を確認済み)。ただし `List` の行レベルはこのハーネスでは観測できない(S5: 行フックが呼ばれない)ため、`List` のカバレッジはサンプルアプリの手動 QA で担保する。`LazyVStack` は spy テストで観測可能。
 2. **純ロジックの単体テスト**: 刻印・デバウンス・オーバーレイの preference 集約などの純粋部分。
 
 やらないこと: アニメーション中間フレームのスナップショットテスト(フレーク源)。見た目の確認はサンプルアプリの手動 QA チェックリスト(`Examples/QA.md`)で代替する。
@@ -241,3 +259,5 @@ SwiftUI のアニメーションは直接テストできない。以下の 2 層
 2. **「制約を課す」ライブラリは採用されにくい**: 機能ではなく規律を売る製品はデモ映えしない。採用の鍵はオーバーレイとリーク検出の「見せられる」体験。ここの完成度を落とさない。
 3. **`withAnimation` は封じ込め不能**(§4.3)。ドキュメントの言葉選びを誤ると誇大広告になる。
 4. **iOS 17 床**: 16 以下を切る判断。規律系ライブラリは新規コードベースから採用されるので許容と判断した。異論があればメンテナに確認。
+5. **`List` の transaction 伝播が未証明**(Phase 0 S5): `List` は UIKit(UICollectionView)に再ホストするため、スコープ/バリアの効果が行コンテンツに及ぶかは未観測。及ばない場合、「行の内側にスコープを置く」という使用制約になる。iOS アプリで最頻出のコンテナであり、ここが崩れると製品価値が大きく削れるため、Phase 1 の最初の QA で潰すこと。
+6. **ルート検出器の盲点**(Phase 0 S3/S4): スコープ外の生 `.animation(_:value:)` はルートから見えない。三層戦略(§5.1)で補うが、「すべてのリークを検出できる」とは決して謳わないこと。
