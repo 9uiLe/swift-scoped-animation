@@ -15,8 +15,8 @@ Manual QA is performed on the iOS simulator unless noted otherwise.
 
 | Area | Steps | Expected Result | Result |
 | --- | --- | --- | --- |
-| Before / After | Open Compare, tap `Raw update`, then tap `Scoped update`. | The raw panel animates unrelated status UI; the scoped panel animates the card while the status UI stays still. | Not run in this pass. |
-| Overlay | Open Overlay, tap `Scoped`, then tap `Raw`. | Scope outlines and labels are visible; raw animation can be detected by the leak detector in DEBUG. | Not run in this pass. |
+| Before / After | Open Compare, tap `Raw update`, then tap `Scoped update`. | The raw panel animates unrelated status UI; the scoped panel animates the card while adjacent status UI updates without visible animation. | Pass |
+| Overlay | Open Overlay, tap `Scoped`, then tap `Raw`. | Scope outlines and labels are visible; raw animation exercises the leak detector placement in DEBUG. | Pass |
 | List scope propagation | Open List QA, select `Scope`, tap `Run selected`. | Row content receives scoped animation when `AnimationScope` wraps `List`. | Pass |
 | List barrier | Open List QA, select `Barrier`, tap `Run selected`. | Row content does not receive animation from the raw parent transaction. | Pass |
 | List reuse | Open List QA, select `Reuse`, tap `Run selected`; scroll offscreen and back before the second pulse. | Rows that leave and re-enter the viewport still receive scoped animation. | Pass |
@@ -48,3 +48,17 @@ Observed screen state after the automatic List QA run:
 | Cell reuse after scroll away/back | `Reuse` displayed `Pass`, with `7/7` animated/observed row transactions after the return pulse. | Pass |
 
 Conclusion: `List` row content received scoped transactions, `animationBarrier()` stripped raw incoming animation inside rows, and scoped behavior survived row reuse in this simulator run.
+
+## M4 Remaining QA Result
+
+Before / After:
+
+- Method: launched the example app on the Compare tab, used accessibility to press `Raw update`, then pressed `Scoped update`.
+- Screenshot: `.build/before-after-qa.png`
+- Result: Pass. The raw panel's status UI visibly participated in the raw animation. The scoped panel's card changed through `AnimationScopeProxy`, while the adjacent status UI updated without visible animation from the scoped transaction.
+
+Overlay:
+
+- Method: launched the Overlay tab with `--screen=overlay --auto-overlay-qa`; the view ran the same `scope.animate` path as the `Scoped` button and the same raw `withAnimation` path as the `Raw` button.
+- Screenshot: `.build/overlay-qa.png`
+- Result: Pass. The overlay rendered the scope outline and `Outer` label. The raw probe changed after the raw animation path, exercising the DEBUG leak detector placement on the demo screen.

@@ -4,6 +4,7 @@ import SwiftUI
 struct OverlayDemoView: View {
   @State private var selected = false
   @State private var rawPulse = false
+  @State private var didStartAutomaticRun = false
 
   var body: some View {
     VStack(spacing: 18) {
@@ -44,6 +45,22 @@ struct OverlayDemoView: View {
         .padding()
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task {
+          guard ProcessInfo.processInfo.arguments.contains("--auto-overlay-qa"),
+            !didStartAutomaticRun
+          else {
+            return
+          }
+          didStartAutomaticRun = true
+          try? await Task.sleep(for: .milliseconds(300))
+          scope.animate {
+            selected.toggle()
+          }
+          try? await Task.sleep(for: .milliseconds(700))
+          withAnimation(.easeInOut(duration: 0.4)) {
+            rawPulse.toggle()
+          }
+        }
       }
 
       RoundedRectangle(cornerRadius: 8)

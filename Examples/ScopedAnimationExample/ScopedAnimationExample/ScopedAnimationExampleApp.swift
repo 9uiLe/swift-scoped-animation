@@ -15,7 +15,14 @@ enum ExampleTab: Hashable {
   case listQA
 
   static var launchDefault: ExampleTab {
-    ProcessInfo.processInfo.arguments.contains("--screen=list-qa") ? .listQA : .comparison
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("--screen=list-qa") {
+      return .listQA
+    }
+    if arguments.contains("--screen=overlay") {
+      return .overlay
+    }
+    return .comparison
   }
 }
 

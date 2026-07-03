@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  build-test-docs:
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Select available iPhone simulator
+        id: simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {gsub(/^ +| +$/, "", $1); selected=$1} END {print selected}')"
+          if [[ -z "${name}" ]]; then
+            echo "No available iPhone simulator found" >&2
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "name=${name}" >> "${GITHUB_OUTPUT}"
+          echo "Using simulator: ${name}"
+
+      - name: Swift format
+        run: |
+          swift format lint --configuration .swift-format \
+            Package.swift \
+            Sources/ScopedAnimation/*.swift \
+            Sources/ScopedAnimation/Diagnostics/*.swift \
+            Tests/ScopedAnimationTests/*.swift \
+            Tests/ScopedAnimationTests/Support/*.swift \
+            Examples/ScopedAnimationExample/ScopedAnimationExample/*.swift
+
+      - name: Build package
+        run: swift build
+
+      - name: Test package on macOS
+        run: swift test
+
+      - name: Test package on iOS Simulator
+        run: |
+          xcodebuild test \
+            -scheme ScopedAnimation \
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}"
+
+      - name: Build package in release
+        run: swift build -c release
+
+      - name: Build DocC documentation
+        run: xcodebuild docbuild -scheme ScopedAnimation -destination 'generic/platform=iOS'
+
+      - name: Build example app
+        run: |
+          xcodebuild build \
+            -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj \
+            -scheme ScopedAnimationExample \
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}"
