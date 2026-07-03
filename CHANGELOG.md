@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-Planned for v0.1.0:
+## 0.1.0 - 2026-07-03
 
 - Add `AnimationScope` value-driven and proxy-driven APIs.
 - Add `animationBarrier(warnsOnLeaks:)` for stripping incoming animation.
