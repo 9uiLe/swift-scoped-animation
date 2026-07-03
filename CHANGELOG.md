@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Add README demo GIF recordings from the example app screens.
+
 ## 0.1.0 - 2026-07-03
 
 - Add `AnimationScope` value-driven and proxy-driven APIs.

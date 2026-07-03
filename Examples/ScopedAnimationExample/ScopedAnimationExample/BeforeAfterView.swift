@@ -42,6 +42,7 @@ private struct ComparisonPanel: View {
   let mode: ComparisonMode
   @State private var expanded = false
   @State private var scopeProxy: AnimationScopeProxy?
+  @State private var didStartAutomaticRun = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -81,6 +82,23 @@ private struct ComparisonPanel: View {
     .clipShape(RoundedRectangle(cornerRadius: 8))
     .shadow(color: .black.opacity(0.08), radius: 8, y: 3)
     .detectAnimationLeaks()
+    .task {
+      await runAutomaticDemoIfNeeded()
+    }
+  }
+
+  @MainActor
+  private func runAutomaticDemoIfNeeded() async {
+    guard ProcessInfo.processInfo.arguments.contains("--auto-compare-demo"),
+      !didStartAutomaticRun
+    else {
+      return
+    }
+
+    didStartAutomaticRun = true
+    let delay: Duration = mode == .before ? .milliseconds(1_000) : .milliseconds(2_400)
+    try? await Task.sleep(for: delay)
+    toggle()
   }
 
   private func toggle() {

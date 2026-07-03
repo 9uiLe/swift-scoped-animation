@@ -2,8 +2,14 @@
 
 Structural boundaries and DEBUG diagnostics for SwiftUI animation.
 
-<!-- Hero GIF placeholder: record the Examples/ScopedAnimationExample Compare, Overlay, and List QA screens before the v0.1.0 release. -->
-_Hero GIF placeholder: Before / After, debug overlay, and List QA recording._
+<p align="center">
+  <img src="docs/assets/overlay-hero.gif" alt="ScopedAnimation debug overlay showing named animation scopes" width="640">
+</p>
+
+<p align="center">
+  <img src="docs/assets/compare-demo.gif" alt="Before and After comparison demo" width="310">
+  <img src="docs/assets/list-qa-demo.gif" alt="List QA propagation and barrier demo" width="310">
+</p>
 
 ScopedAnimation helps you make animation ownership visible. It blocks incoming animation at explicit boundaries, stamps animation created by `AnimationScope`, and reports unstamped animation transactions in DEBUG builds.
 

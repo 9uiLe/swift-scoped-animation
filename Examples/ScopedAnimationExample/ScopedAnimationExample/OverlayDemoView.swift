@@ -46,19 +46,41 @@ struct OverlayDemoView: View {
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .task {
-          guard ProcessInfo.processInfo.arguments.contains("--auto-overlay-qa"),
+          let arguments = ProcessInfo.processInfo.arguments
+          guard
+            arguments.contains("--auto-overlay-qa") || arguments.contains("--auto-overlay-demo"),
             !didStartAutomaticRun
           else {
             return
           }
+
           didStartAutomaticRun = true
-          try? await Task.sleep(for: .milliseconds(300))
-          scope.animate {
-            selected.toggle()
-          }
-          try? await Task.sleep(for: .milliseconds(700))
-          withAnimation(.easeInOut(duration: 0.4)) {
-            rawPulse.toggle()
+          if arguments.contains("--auto-overlay-demo") {
+            try? await Task.sleep(for: .milliseconds(1_000))
+            scope.animate {
+              selected.toggle()
+            }
+            try? await Task.sleep(for: .milliseconds(1_000))
+            withAnimation(.easeInOut(duration: 0.4)) {
+              rawPulse.toggle()
+            }
+            try? await Task.sleep(for: .milliseconds(1_000))
+            scope.animate {
+              selected.toggle()
+            }
+            try? await Task.sleep(for: .milliseconds(700))
+            withAnimation(.easeInOut(duration: 0.4)) {
+              rawPulse.toggle()
+            }
+          } else {
+            try? await Task.sleep(for: .milliseconds(300))
+            scope.animate {
+              selected.toggle()
+            }
+            try? await Task.sleep(for: .milliseconds(700))
+            withAnimation(.easeInOut(duration: 0.4)) {
+              rawPulse.toggle()
+            }
           }
         }
       }
