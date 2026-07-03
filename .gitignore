@@ -13,3 +13,6 @@ DerivedData/
 
 # Disposable Phase 0 spike code
 spike/
+
+# Local agent/tool caches
+.tokensave/
