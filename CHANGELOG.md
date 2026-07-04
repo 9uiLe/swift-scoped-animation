@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Add DEBUG runtime warning when an AnimationScope boundary strips another scope's stamped animation.
 - Add the GitHub social preview asset.
 
 ## 0.1.0 - 2026-07-03

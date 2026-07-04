@@ -45,10 +45,34 @@ struct AnimationBarrierModifier: ViewModifier {
 
 struct AnimationScopeBoundaryModifier: ViewModifier {
   let stamp: AnimationScopeStamp
+  #if DEBUG
+    @State private var warningSite = AnimationScopeRuntimeWarning.Site("AnimationScopeBoundary")
+  #endif
 
   func body(content: Content) -> some View {
     content.transaction { transaction in
+      #if DEBUG
+        let incomingAnimation = transaction.animation
+      #endif
       let incomingStamp = transaction.animationScopeStamp
+
+      #if DEBUG
+        if !transaction.disablesAnimations,
+          incomingAnimation != nil,
+          let incomingStamp,
+          incomingStamp.id != stamp.id,
+          incomingStamp.animation != nil
+        {
+          AnimationScopeRuntimeWarning.report(
+            .crossScopeAnimationStrip(
+              site: warningSite,
+              strippingScopeName: stamp.name,
+              strippedScopeName: incomingStamp.name
+            )
+          )
+        }
+      #endif
+
       transaction.animation = nil
 
       guard !transaction.disablesAnimations,
