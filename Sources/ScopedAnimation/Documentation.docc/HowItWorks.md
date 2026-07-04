@@ -18,6 +18,24 @@ Every scope boundary uses a strip-then-restore rule:
 
 This means ancestor animations do not flow into the scope. Proxy-driven animations are restored only inside the scope that created them. Nested scopes work because an outer stamped transaction is stripped at the inner boundary and is not restored there.
 
+## Nested Scope Semantics
+
+Nested `AnimationScope` values do not compose multiple animations over the same
+subtree. The descendant boundary wins because it strips every incoming animation
+and restores only a stamp with its own scope identifier.
+
+That includes value-driven scopes. If an outer value-driven scope stamps a
+transaction, an inner scope boundary treats that stamp as belonging to another
+scope and leaves `transaction.animation` as `nil`. The stamp is still present,
+but the animation effect is intentionally blocked at the descendant boundary.
+
+In DEBUG builds, ScopedAnimation reports this as `crossScopeAnimationStrip` when
+the stripped transaction carried another scope's stamped animation. The warning
+is not a leak warning; it is a composition warning. Use sibling scopes for
+separate visual layers, move the animation owner closer to the affected subtree,
+or keep a documented raw `.animation(_:value:)` exception when one subtree truly
+needs multiple triggers.
+
 ## Value-Driven Scopes
 
 The value-driven initializer applies SwiftUI's `.animation(_:value:)` behavior inside the boundary and stamps the resulting transaction. The stamp is downstream-only: views above the scope do not see it.

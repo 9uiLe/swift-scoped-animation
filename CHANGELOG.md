@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Document nested scope semantics, composition patterns, static lint recipe, and small-app adoption guidance.
 - Add DEBUG runtime warning when an AnimationScope boundary strips another scope's stamped animation.
 - Add the GitHub social preview asset.
 

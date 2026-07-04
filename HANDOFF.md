@@ -80,7 +80,7 @@ AnimationScope(.snappy) { scope in
 1. **流入遮断(strip-then-restore)**: スコープ境界は流入 transaction からアニメーションを**常時**剥がす(刻印の有無を問わない)。外の `withAnimation` や implicit animation はスコープ内に届かない。
 2. **(A) 値駆動**: 内部的に `.animation(_:value:)` 相当。`value` の変化に起因する更新のみアニメーションし、その transaction にスコープの刻印を打つ。**刻印が届くのはスコープ内の子孫のみ**(downstream-only。Phase 0 S3 で確認)。スコープより上の観測点からこのアニメーションは見えない。
 3. **(B) 明示駆動**: `scope.animate {}` は `withTransaction` で「スコープ ID + 実際に使うアニメーション」を刻印した transaction を作って body を実行する。刻印はツリー全体(ルートの観測点を含む)に到達する。アニメーションを復元するのは**刻印のスコープ ID が一致する自スコープの境界のみ**。したがって proxy のアニメーションが適用されるのは自スコープのサブツリー内に限られ、**外側スコープの領域には適用されない**。`transaction.disablesAnimations == true` の場合は復元しない。
-4. **ネスト**: 内側のスコープが勝つ。外側 proxy の transaction は内側境界で剥がされ、ID 不一致のため復元されない。内側 proxy の transaction は外側境界で一旦剥がされ、内側境界で復元される。
+4. **ネスト**: 内側のスコープが勝つ。外側 proxy の transaction は内側境界で剥がされ、ID 不一致のため復元されない。内側 proxy の transaction は外側境界で一旦剥がされ、内側境界で復元される。値駆動スコープでも同じで、子孫スコープ境界は祖先スコープの刻印付き transaction から animation を剥がし、自スコープ ID でないため復元しない。したがって単一サブツリーに複数の `(animation, value)` ペアを掛ける目的でネストしてはならない。DEBUG では他スコープの刻印付き animation を剥がした境界が `crossScopeAnimationStrip` 警告を発報する。
 5. `.transition` はスコープ内の構造変化(if/switch)に対して期待通り動くこと(insertion/removal の transaction がスコープから供給される)。
 
 ```swift
