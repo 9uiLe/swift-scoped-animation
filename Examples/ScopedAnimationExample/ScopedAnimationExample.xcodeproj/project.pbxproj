@@ -11,6 +11,7 @@
     0E1000010000000000000002 /* BeforeAfterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1000110000000000000002 /* BeforeAfterView.swift */; };
     0E1000010000000000000003 /* OverlayDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1000110000000000000003 /* OverlayDemoView.swift */; };
     0E1000010000000000000004 /* ListQAView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1000110000000000000004 /* ListQAView.swift */; };
+    0E1000010000000000000006 /* MultiTriggerBoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1000110000000000000006 /* MultiTriggerBoardView.swift */; };
     0E1000010000000000000005 /* ScopedAnimation in Frameworks */ = {isa = PBXBuildFile; productRef = 0E1000710000000000000001 /* ScopedAnimation */; };
 /* End PBXBuildFile section */
 
@@ -19,6 +20,7 @@
     0E1000110000000000000002 /* BeforeAfterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeforeAfterView.swift; sourceTree = "<group>"; };
     0E1000110000000000000003 /* OverlayDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayDemoView.swift; sourceTree = "<group>"; };
     0E1000110000000000000004 /* ListQAView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListQAView.swift; sourceTree = "<group>"; };
+    0E1000110000000000000006 /* MultiTriggerBoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiTriggerBoardView.swift; sourceTree = "<group>"; };
     0E1000110000000000000005 /* ScopedAnimationExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScopedAnimationExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -49,6 +51,7 @@
         0E1000110000000000000002 /* BeforeAfterView.swift */,
         0E1000110000000000000003 /* OverlayDemoView.swift */,
         0E1000110000000000000004 /* ListQAView.swift */,
+        0E1000110000000000000006 /* MultiTriggerBoardView.swift */,
       );
       path = ScopedAnimationExample;
       sourceTree = "<group>";
@@ -139,6 +142,7 @@
         0E1000010000000000000002 /* BeforeAfterView.swift in Sources */,
         0E1000010000000000000003 /* OverlayDemoView.swift in Sources */,
         0E1000010000000000000004 /* ListQAView.swift in Sources */,
+        0E1000010000000000000006 /* MultiTriggerBoardView.swift in Sources */,
       );
       runOnlyForDeploymentPostprocessing = 0;
     };

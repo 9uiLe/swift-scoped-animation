@@ -473,6 +473,198 @@
       }
     #endif
 
+    func testMultiTriggerScopeAnimatesFirstTriggerIndependently() {
+      let model = MultiTriggerProbeModel()
+      let recorder = TransactionRecorder()
+      let selectionAnimation = Animation.easeOut(duration: 0.12)
+      _ = host(
+        MultiTriggerProbeView(
+          model: model,
+          recorder: recorder,
+          selectionAnimation: selectionAnimation,
+          hintAnimation: Animation.spring(response: 0.35, dampingFraction: 0.7)
+        )
+      )
+      pumpRunLoop()
+
+      recorder.clear()
+      model.selectedPoints = 1
+      pumpRunLoop()
+      recorder.dump("M2_MULTI_TRIGGER_SELECTION")
+
+      XCTAssertTrue(recorder.hasAnimation("multi-trigger-child"))
+      XCTAssertTrue(recorder.hasStamp("multi-trigger-child"))
+      XCTAssertTrue(
+        recorder.hasAnimationDescription(
+          "multi-trigger-child",
+          String(describing: selectionAnimation)
+        )
+      )
+    }
+
+    func testMultiTriggerScopeAnimatesSecondTriggerIndependently() {
+      let model = MultiTriggerProbeModel()
+      let recorder = TransactionRecorder()
+      let hintAnimation = Animation.spring(response: 0.35, dampingFraction: 0.7)
+      _ = host(
+        MultiTriggerProbeView(
+          model: model,
+          recorder: recorder,
+          selectionAnimation: Animation.easeOut(duration: 0.12),
+          hintAnimation: hintAnimation
+        )
+      )
+      pumpRunLoop()
+
+      recorder.clear()
+      model.hintPoints = 1
+      pumpRunLoop()
+      recorder.dump("M2_MULTI_TRIGGER_HINT")
+
+      XCTAssertTrue(recorder.hasAnimation("multi-trigger-child"))
+      XCTAssertTrue(recorder.hasStamp("multi-trigger-child"))
+      XCTAssertTrue(
+        recorder.hasAnimationDescription(
+          "multi-trigger-child",
+          String(describing: hintAnimation)
+        )
+      )
+    }
+
+    func testMultiTriggerScopePrefersFirstTriggerOnSimultaneousChange() {
+      let model = MultiTriggerProbeModel()
+      let recorder = TransactionRecorder()
+      let selectionAnimation = Animation.easeOut(duration: 0.12)
+      let hintAnimation = Animation.spring(response: 0.35, dampingFraction: 0.7)
+      _ = host(
+        MultiTriggerProbeView(
+          model: model,
+          recorder: recorder,
+          selectionAnimation: selectionAnimation,
+          hintAnimation: hintAnimation
+        )
+      )
+      pumpRunLoop()
+
+      recorder.clear()
+      model.selectedPoints = 1
+      model.hintPoints = 1
+      pumpRunLoop()
+      recorder.dump("M2_MULTI_TRIGGER_SIMULTANEOUS")
+
+      XCTAssertTrue(
+        recorder.hasAnimationDescription(
+          "multi-trigger-child",
+          String(describing: selectionAnimation)
+        )
+      )
+      XCTAssertFalse(
+        recorder.hasAnimationDescription(
+          "multi-trigger-child",
+          String(describing: hintAnimation)
+        )
+      )
+    }
+
+    func testMultiTriggerScopeDoesNotAnimateUnrelatedStateChanges() {
+      let model = MultiTriggerProbeModel()
+      let recorder = TransactionRecorder()
+      _ = host(
+        MultiTriggerProbeView(
+          model: model,
+          recorder: recorder,
+          selectionAnimation: Animation.easeOut(duration: 0.12),
+          hintAnimation: Animation.spring(response: 0.35, dampingFraction: 0.7)
+        )
+      )
+      pumpRunLoop()
+
+      recorder.clear()
+      model.unrelated.toggle()
+      pumpRunLoop()
+      recorder.dump("M2_MULTI_TRIGGER_UNRELATED")
+
+      XCTAssertFalse(recorder.hasAnimation("multi-trigger-child"))
+      XCTAssertFalse(recorder.hasStamp("multi-trigger-child"))
+    }
+
+    func testIssue1BoardCaseUsesMultiTriggerScopeForSelectionAndHint() {
+      let model = MultiTriggerProbeModel()
+      let recorder = TransactionRecorder()
+      let selectionAnimation = Animation.easeOut(duration: 0.12)
+      let hintAnimation = Animation.spring(response: 0.35, dampingFraction: 0.7)
+      _ = host(
+        MultiTriggerProbeView(
+          model: model,
+          recorder: recorder,
+          selectionAnimation: selectionAnimation,
+          hintAnimation: hintAnimation
+        )
+      )
+      pumpRunLoop()
+
+      recorder.clear()
+      model.selectedPoints = 2
+      pumpRunLoop()
+      recorder.dump("M2_ISSUE1_SELECTION")
+      XCTAssertTrue(
+        recorder.hasAnimationDescription(
+          "multi-trigger-child",
+          String(describing: selectionAnimation)
+        )
+      )
+
+      recorder.clear()
+      model.hintPoints = 2
+      pumpRunLoop()
+      recorder.dump("M2_ISSUE1_HINT")
+      XCTAssertTrue(
+        recorder.hasAnimationDescription(
+          "multi-trigger-child",
+          String(describing: hintAnimation)
+        )
+      )
+    }
+
+    #if DEBUG
+      func testMultiTriggerScopeReportsConflictWarningOnSimultaneousChange() {
+        let model = MultiTriggerProbeModel()
+        let recorder = TransactionRecorder()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(
+              MultiTriggerProbeView(
+                model: model,
+                recorder: recorder,
+                selectionAnimation: Animation.easeOut(duration: 0.12),
+                hintAnimation: Animation.spring(response: 0.35, dampingFraction: 0.7)
+              )
+            )
+            pumpRunLoop()
+
+            recorder.clear()
+            model.selectedPoints = 3
+            model.hintPoints = 3
+            pumpRunLoop()
+            recorder.dump("M2_MULTI_TRIGGER_CONFLICT_WARNING")
+          }
+        )
+
+        XCTAssertEqual(warningRecorder.warnings.count, 1)
+        XCTAssertEqual(
+          warningRecorder.warnings.first?.title,
+          "AnimationScope multi-trigger conflict"
+        )
+        XCTAssertTrue(warningRecorder.warnings.first?.message.contains("trigger[0]") == true)
+        XCTAssertTrue(warningRecorder.warnings.first?.message.contains("trigger[1]") == true)
+      }
+    #endif
+
     func testValueDrivenScopeRestampsWhenAnimationChangesInsideStampedTransaction() throws {
       let model = ProbeModel()
       let recorder = TransactionRecorder()
@@ -797,6 +989,36 @@
       Text("barrier-sensor")
         .opacity(model.outer ? 0.2 : 1)
         .animationBarrier(warnsOnLeaks: warnsOnLeaks)
+    }
+  }
+
+  @MainActor
+  private final class MultiTriggerProbeModel: ObservableObject {
+    @Published var selectedPoints = 0
+    @Published var hintPoints = 0
+    @Published var unrelated = false
+  }
+
+  @MainActor
+  private struct MultiTriggerProbeView: View {
+    @ObservedObject var model: MultiTriggerProbeModel
+    let recorder: TransactionRecorder
+    let selectionAnimation: Animation
+    let hintAnimation: Animation
+
+    var body: some View {
+      AnimationScope(
+        name: "Board",
+        triggers: [
+          .animation(selectionAnimation, value: model.selectedPoints),
+          .animation(hintAnimation, value: model.hintPoints),
+        ]
+      ) {
+        Text("multi-trigger")
+          .scaleEffect(model.selectedPoints > 0 ? 1.1 : 1)
+          .opacity(model.hintPoints > 0 ? 0.6 : (model.unrelated ? 0.8 : 1))
+          .transaction { recorder.record("multi-trigger-child", $0) }
+      }
     }
   }
 

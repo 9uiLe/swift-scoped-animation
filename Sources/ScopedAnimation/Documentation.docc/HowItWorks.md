@@ -32,9 +32,29 @@ but the animation effect is intentionally blocked at the descendant boundary.
 In DEBUG builds, ScopedAnimation reports this as `crossScopeAnimationStrip` when
 the stripped transaction carried another scope's stamped animation. The warning
 is not a leak warning; it is a composition warning. Use sibling scopes for
-separate visual layers, move the animation owner closer to the affected subtree,
-or keep a documented raw `.animation(_:value:)` exception when one subtree truly
-needs multiple triggers.
+separate visual layers, `AnimationScope(name:triggers:)` when one subtree needs
+multiple triggers, or move the animation owner closer to the affected subtree.
+
+## Multi-Trigger Scopes
+
+When several `(animation, value)` pairs affect the same subtree, declare them in
+one scope instead of nesting:
+
+```swift
+AnimationScope(
+  name: "Board",
+  triggers: [
+    .animation(.easeOut(duration: 0.12), value: selectedPoints),
+    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintPoints),
+  ]
+) {
+  BoardView()
+}
+```
+
+If multiple trigger values change in the same transaction, the trigger closest to
+the start of the array wins. DEBUG builds report `multiTriggerConflict` when a
+lower-priority trigger was ignored.
 
 ## Value-Driven Scopes
 
