@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## 0.2.0 - 2026-07-05
 
 - Add multi-trigger `AnimationScope(name:triggers:)` with declaration-order conflict resolution and DEBUG `multiTriggerConflict` warnings.
 - Document nested scope semantics, composition patterns, static lint recipe, and small-app adoption guidance.
