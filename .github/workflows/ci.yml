@@ -19,6 +19,10 @@ on:
       - ".swift-format"
       - ".github/workflows/ci.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   build-test-docs:
     # Pinned: macos-latest can still resolve to macos-15 (default Xcode 16.4 /
@@ -31,6 +35,22 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.swift', 'Sources/**/*.swift', 'Tests/**/*.swift') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: DerivedData
+          key: deriveddata-${{ runner.os }}-${{ hashFiles('Package.swift', 'Sources/**/*.swift', 'Tests/**/*.swift', 'Examples/**/*.swift') }}
+          restore-keys: |
+            deriveddata-${{ runner.os }}-
 
       - name: Select available iPhone simulator
         id: simulator
@@ -66,17 +86,21 @@ jobs:
         run: |
           xcodebuild test \
             -scheme ScopedAnimation \
-            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}"
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}" \
+            -derivedDataPath DerivedData \
+            COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Build package in release
         run: swift build -c release
 
       - name: Build DocC documentation
-        run: xcodebuild docbuild -scheme ScopedAnimation -destination 'generic/platform=iOS'
+        run: xcodebuild docbuild -scheme ScopedAnimation -destination 'generic/platform=iOS' -derivedDataPath DerivedData COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Build example app
         run: |
           xcodebuild build \
             -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj \
             -scheme ScopedAnimationExample \
-            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}"
+            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}" \
+            -derivedDataPath DerivedData \
+            COMPILER_INDEX_STORE_ENABLE=NO
