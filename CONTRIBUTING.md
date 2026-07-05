@@ -51,3 +51,7 @@ Diagnostics code paths must be guarded with `#if DEBUG`. When checking that code
 ## Tests
 
 Behavioral transaction tests live in `Tests/ScopedAnimationTests/Support/`. Prefer spy-based tests for transaction semantics.
+
+## Releasing
+
+Run `scripts/release.sh <version>` (for example `scripts/release.sh 0.2.0`). The script verifies the pre-flight state and CI status, runs the local checks, rolls the `## Unreleased` changelog section over to the new version, updates the README version, then commits, tags, pushes, and creates the GitHub release. Run it with `--dry-run` first to preview the release without making any changes.
