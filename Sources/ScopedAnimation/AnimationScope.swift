@@ -5,6 +5,11 @@ import SwiftUI
 /// `AnimationScope` blocks animations from ancestors, then allows only
 /// animation created by the scope to affect its content.
 ///
+/// Nested scopes do not combine animations for the same subtree. A descendant
+/// scope strips an ancestor scope's stamped animation and restores only its own
+/// stamp. In DEBUG builds, that cross-scope strip is reported as
+/// `crossScopeAnimationStrip`.
+///
 /// ```swift
 /// AnimationScope(.spring(duration: 0.3), value: isExpanded) {
 ///   CardContent(isExpanded: isExpanded)
@@ -21,7 +26,8 @@ public struct AnimationScope<Content: View>: View {
   /// Creates a value-driven animation scope.
   ///
   /// The subtree animates when `value` changes. Animations from ancestors are
-  /// blocked at the scope boundary.
+  /// blocked at the scope boundary, including animations created by an ancestor
+  /// `AnimationScope`.
   ///
   /// ```swift
   /// AnimationScope(.smooth, value: isSelected) {

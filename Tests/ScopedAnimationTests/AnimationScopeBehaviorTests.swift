@@ -124,6 +124,41 @@
       XCTAssertTrue(recorder.hasStamp("nested-inner-child"))
     }
 
+    func testNonNestedValueDrivenScopeKeepsItsValueAnimation() {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      _ = host(NonNestedValueScopeProbeView(model: model, recorder: recorder))
+      pumpRunLoop()
+
+      recorder.clear()
+      model.outer.toggle()
+      pumpRunLoop()
+      recorder.dump("M1_NON_NESTED_VALUE_OUTER")
+
+      XCTAssertTrue(recorder.hasAnimation("control-value-child"))
+      XCTAssertTrue(recorder.hasStampName("control-value-child", "Control"))
+    }
+
+    func testNestedValueDrivenScopeStripsAncestorValueAnimationAtDescendantBoundary() {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      _ = host(NestedValueScopeProbeView(model: model, recorder: recorder))
+      pumpRunLoop()
+
+      recorder.clear()
+      model.outer.toggle()
+      pumpRunLoop()
+      recorder.dump("M1_NESTED_VALUE_OUTER")
+
+      XCTAssertFalse(recorder.hasAnimation("nested-value-child"))
+      XCTAssertTrue(recorder.hasStampName("nested-value-child", "Outer"))
+      XCTAssertTrue(
+        recorder.matching("nested-value-child").contains {
+          !$0.hasAnimation && $0.stampName == "Outer" && $0.stampAnimationDescription != nil
+        }
+      )
+    }
+
     func testInnerProxyDoesNotAnimateOuterScopeRegion() throws {
       let model = ProbeModel()
       let recorder = TransactionRecorder()
@@ -215,6 +250,85 @@
     }
 
     #if DEBUG
+      func testNestedValueDrivenScopeWarnsWhenDescendantBoundaryStripsAncestorAnimation() {
+        let model = ProbeModel()
+        let recorder = TransactionRecorder()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(NestedValueScopeProbeView(model: model, recorder: recorder))
+            pumpRunLoop()
+
+            recorder.clear()
+            model.outer.toggle()
+            pumpRunLoop()
+            recorder.dump("M1_NESTED_VALUE_WARNING")
+          }
+        )
+
+        XCTAssertFalse(recorder.hasAnimation("nested-value-child"))
+        XCTAssertEqual(warningRecorder.warnings.count, 1)
+        XCTAssertEqual(
+          warningRecorder.warnings.first?.title,
+          "AnimationScope boundary stripped another scope's animation"
+        )
+        XCTAssertTrue(warningRecorder.warnings.first?.message.contains("Inner") == true)
+        XCTAssertTrue(warningRecorder.warnings.first?.message.contains("Outer") == true)
+      }
+
+      func testNonNestedValueDrivenScopeDoesNotWarn() {
+        let model = ProbeModel()
+        let recorder = TransactionRecorder()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(NonNestedValueScopeProbeView(model: model, recorder: recorder))
+            pumpRunLoop()
+
+            recorder.clear()
+            model.outer.toggle()
+            pumpRunLoop()
+            recorder.dump("M1_NON_NESTED_VALUE_NO_WARNING")
+          }
+        )
+
+        XCTAssertTrue(recorder.hasAnimation("control-value-child"))
+        XCTAssertEqual(warningRecorder.warnings.count, 0)
+      }
+
+      func testNestedValueDrivenScopeDoesNotWarnForInnerScopeTrigger() {
+        let model = ProbeModel()
+        let recorder = TransactionRecorder()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(NestedValueScopeProbeView(model: model, recorder: recorder))
+            pumpRunLoop()
+
+            recorder.clear()
+            model.inner.toggle()
+            pumpRunLoop()
+            recorder.dump("M1_NESTED_VALUE_INNER_NO_WARNING")
+          }
+        )
+
+        XCTAssertTrue(recorder.hasAnimation("nested-value-child"))
+        XCTAssertTrue(recorder.hasStampName("nested-value-child", "Inner"))
+        XCTAssertEqual(warningRecorder.warnings.count, 0)
+      }
+
       func testDetectAnimationLeaksReportsUnscopedAnimationTransactions() {
         let model = ProbeModel()
         let warningRecorder = WarningRecorder()
@@ -531,6 +645,38 @@
               proxyBox.outerProxy = outerScope
               proxyBox.innerProxy = innerScope
             }
+        }
+      }
+    }
+  }
+
+  @MainActor
+  private struct NonNestedValueScopeProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+
+    var body: some View {
+      AnimationScope(.easeOut(duration: 0.12), value: model.outer, name: "Control") {
+        Text("control")
+          .opacity(model.outer ? 0.2 : 1)
+          .transaction { recorder.record("control-value-child", $0) }
+      }
+    }
+  }
+
+  @MainActor
+  private struct NestedValueScopeProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+
+    var body: some View {
+      AnimationScope(.easeOut(duration: 0.12), value: model.outer, name: "Outer") {
+        AnimationScope(
+          .spring(response: 0.35, dampingFraction: 0.7), value: model.inner, name: "Inner"
+        ) {
+          Text("nested-value")
+            .opacity(model.outer ? 0.2 : (model.inner ? 0.6 : 1))
+            .transaction { recorder.record("nested-value-child", $0) }
         }
       }
     }

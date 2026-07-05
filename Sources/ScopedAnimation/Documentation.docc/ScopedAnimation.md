@@ -33,6 +33,7 @@ AnimationScope(.snappy, name: "Panel") { scope in
 ### Start Here
 
 - <doc:GettingStarted>
+- <doc:Composition>
 - <doc:HowItWorks>
 - <doc:PerformancePlaybook>
 

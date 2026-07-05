@@ -101,5 +101,30 @@
           + "barrier intentionally silences legacy animation."
       )
     }
+
+    static func crossScopeAnimationStrip(
+      site: AnimationScopeRuntimeWarning.Site,
+      strippingScopeName: String?,
+      strippedScopeName: String?
+    ) -> Self {
+      let strippingScope = scopeDisplayName(strippingScopeName)
+      let strippedScope = scopeDisplayName(strippedScopeName)
+
+      return AnimationScopeWarning(
+        siteID: site.id,
+        title: "AnimationScope boundary stripped another scope's animation",
+        message: "AnimationScope \(strippingScope) stripped a stamped animation from "
+          + "AnimationScope \(strippedScope). Nested AnimationScope boundaries block ancestor "
+          + "scope animations. Use sibling scopes for separate subtrees; one subtree with "
+          + "multiple triggers cannot be represented by nesting."
+      )
+    }
+
+    private static func scopeDisplayName(_ name: String?) -> String {
+      guard let name, !name.isEmpty else {
+        return "unnamed scope"
+      }
+      return "\"\(name)\""
+    }
   }
 #endif
