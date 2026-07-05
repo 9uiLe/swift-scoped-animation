@@ -137,14 +137,32 @@ preflight_checks() {
            ([.[] | select(.status != "completed")] | length),
            ([.[] | select(.status == "completed" and .conclusion != "success")] | length)] | @tsv')"
   if [ "$total" -eq 0 ]; then
-    die "no CI runs found for HEAD commit $local_sha" \
-      "push the commit, wait for CI to complete, then rerun this script."
+    echo "No CI runs found for HEAD (documentation-only changes skip CI)."
+    echo "Falling back to the latest CI run on master."
+    local latest_status latest_conclusion latest_sha
+    read -r latest_status latest_conclusion latest_sha <<<"$(gh run list --branch master --limit 1 \
+      --json status,conclusion,headSha \
+      --jq '.[0] | [.status, .conclusion, .headSha] | @tsv')"
+    if [ -z "$latest_status" ]; then
+      die "no CI runs found on master at all" \
+        "push a build-affecting change and let CI complete, or check the Actions tab."
+    fi
+    if [ "$latest_status" != "completed" ]; then
+      die "the latest CI run on master is still in progress" \
+        "wait for it to complete and rerun this script."
+    fi
+    if [ "$latest_conclusion" != "success" ]; then
+      die "the latest CI run on master did not succeed (conclusion: $latest_conclusion)" \
+        "fix CI on master before releasing."
+    fi
+    echo "Latest master CI run (commit ${latest_sha:0:7}) completed successfully."
+  else
+    if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ]; then
+      die "CI for HEAD is not fully green ($incomplete incomplete, $failed failed of $total runs)" \
+        "wait for CI to complete successfully after pushing, then rerun this script."
+    fi
+    echo "All $total CI runs for HEAD completed successfully."
   fi
-  if [ "$incomplete" -gt 0 ] || [ "$failed" -gt 0 ]; then
-    die "CI for HEAD is not fully green ($incomplete incomplete, $failed failed of $total runs)" \
-      "wait for CI to complete successfully after pushing, then rerun this script."
-  fi
-  echo "All $total CI runs for HEAD completed successfully."
 }
 
 local_verification() {
