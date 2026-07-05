@@ -17,7 +17,7 @@ import SwiftUI
 /// ```
 public struct AnimationScope<Content: View>: View {
   private let animation: Animation
-  private let triggerValue: AnyEquatable?
+  private let triggers: [AnimationTrigger]
   private let name: String?
   private let content: (AnimationScopeProxy) -> Content
 
@@ -41,7 +41,35 @@ public struct AnimationScope<Content: View>: View {
     @ViewBuilder content: @escaping () -> Content
   ) {
     self.animation = animation
-    self.triggerValue = AnyEquatable(value)
+    self.triggers = [.animation(animation, value: value)]
+    self.name = name
+    self.content = { _ in content() }
+  }
+
+  /// Creates a multi-trigger value-driven animation scope.
+  ///
+  /// The subtree animates when any configured trigger value changes. When
+  /// multiple trigger values change in the same transaction, the trigger
+  /// closest to the start of the `triggers` array wins.
+  ///
+  /// ```swift
+  /// AnimationScope(
+  ///   name: "Board",
+  ///   triggers: [
+  ///     .animation(.easeOut(duration: 0.12), value: selectedPoints),
+  ///     .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintPoints),
+  ///   ]
+  /// ) {
+  ///   BoardView()
+  /// }
+  /// ```
+  public init(
+    name: String? = nil,
+    triggers: [AnimationTrigger],
+    @ViewBuilder content: @escaping () -> Content
+  ) {
+    self.animation = triggers.first?.animation ?? .default
+    self.triggers = triggers
     self.name = name
     self.content = { _ in content() }
   }
@@ -64,7 +92,7 @@ public struct AnimationScope<Content: View>: View {
     @ViewBuilder content: @escaping (AnimationScopeProxy) -> Content
   ) {
     self.animation = animation
-    self.triggerValue = nil
+    self.triggers = []
     self.name = name
     self.content = content
   }
@@ -76,8 +104,8 @@ public struct AnimationScope<Content: View>: View {
     content(proxy)
       .modifier(
         AnimationScopeCoreModifier(
-          animation: animation,
-          triggerValue: triggerValue,
+          triggers: triggers,
+          scopeName: name,
           stamp: namedStamp
         )
       )
@@ -86,8 +114,8 @@ public struct AnimationScope<Content: View>: View {
 }
 
 private struct AnimationScopeCoreModifier: ViewModifier {
-  let animation: Animation
-  let triggerValue: AnyEquatable?
+  let triggers: [AnimationTrigger]
+  let scopeName: String?
   let stamp: AnimationScopeStamp
 
   @ViewBuilder
@@ -101,15 +129,72 @@ private struct AnimationScopeCoreModifier: ViewModifier {
       }
     }
 
-    if let triggerValue {
+    if triggers.isEmpty {
       stampedContent
-        .animation(animation, value: triggerValue)
+        .modifier(AnimationScopeBoundaryModifier(stamp: stamp))
+    } else if triggers.count == 1 {
+      stampedContent
+        .animation(triggers[0].animation, value: triggers[0].value)
         .modifier(AnimationScopeBoundaryModifier(stamp: stamp))
     } else {
       stampedContent
+        .modifier(
+          MultiTriggerValueAnimationModifier(
+            triggers: triggers,
+            scopeName: scopeName
+          )
+        )
         .modifier(AnimationScopeBoundaryModifier(stamp: stamp))
     }
   }
+}
+
+private struct MultiTriggerValueAnimationModifier: ViewModifier {
+  let triggers: [AnimationTrigger]
+  let scopeName: String?
+
+  #if DEBUG
+    @State private var warningSite = AnimationScopeRuntimeWarning.Site("MultiTriggerConflict")
+  #endif
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    let animatedContent = triggers.reduce(AnyView(content)) { view, trigger in
+      AnyView(view.animation(trigger.animation, value: trigger.value))
+    }
+
+    #if DEBUG
+      animatedContent
+        .onChange(of: TriggerValuesSnapshot(values: triggers.map(\.value))) {
+          oldSnapshot,
+          newSnapshot in
+          let changedIndices = triggers.indices.filter {
+            oldSnapshot.values[$0] != newSnapshot.values[$0]
+          }
+
+          if changedIndices.count > 1 {
+            let adoptedIndex = changedIndices[0]
+            let rejectedIndices = Array(changedIndices.dropFirst())
+            AnimationScopeRuntimeWarning.report(
+              .multiTriggerConflict(
+                site: warningSite,
+                scopeName: scopeName,
+                adoptedTriggerIndex: adoptedIndex,
+                adoptedAnimation: triggers[adoptedIndex].animation,
+                rejectedTriggerIndices: rejectedIndices,
+                rejectedAnimations: rejectedIndices.map { triggers[$0].animation }
+              )
+            )
+          }
+        }
+    #else
+      animatedContent
+    #endif
+  }
+}
+
+private struct TriggerValuesSnapshot: Equatable {
+  let values: [AnyEquatable]
 }
 
 struct AnyEquatable: Equatable {

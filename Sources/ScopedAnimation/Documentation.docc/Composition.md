@@ -24,9 +24,10 @@ subtree. Descendant scopes strip ancestor scoped animations. In DEBUG builds,
 `crossScopeAnimationStrip` reports that composition because the inner boundary
 removed another scope's stamped animation.
 
-When two triggers truly affect the same view tree, choose one owner, split the
-visual layers into siblings if possible, or leave a small documented
-`.animation(_:value:)` exception until a multi-trigger API exists.
+When two triggers truly affect the same view tree, use
+``AnimationScope/init(name:triggers:content:)`` so every trigger is visible in
+one declaration. If multiple trigger values change in the same transaction, the
+first trigger in the array wins and DEBUG builds report `multiTriggerConflict`.
 
 ## Reserve Static Slots
 

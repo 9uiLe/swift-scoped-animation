@@ -20,6 +20,11 @@ Manual QA is performed on the iOS simulator unless noted otherwise.
 | List scope propagation | Open List QA, select `Scope`, tap `Run selected`. | Row content receives scoped animation when `AnimationScope` wraps `List`. | Pass |
 | List barrier | Open List QA, select `Barrier`, tap `Run selected`. | Row content does not receive animation from the raw parent transaction. | Pass |
 | List reuse | Open List QA, select `Reuse`, tap `Run selected`; scroll offscreen and back before the second pulse. | Rows that leave and re-enter the viewport still receive scoped animation. | Pass |
+| Multi-Trigger selection | Open Multi-Trigger, tap cells on the board. | Selected cells animate with the fast easeOut highlight (background and scale). | |
+| Multi-Trigger hints | Tap `Show hints`. | Hint cells animate with the spring (border, symbol, offset/scale); selection state is unchanged. | |
+| Multi-Trigger conflict | Tap `Select + hint together`. | Both sets change in one update; motion follows easeOut (first trigger), not spring. | |
+| Multi-Trigger DEBUG warning | Run the conflict step in a DEBUG build; watch the Xcode console. | A `multiTriggerConflict` runtime warning is logged. | |
+| Multi-Trigger reset | Tap `Reset`. | Both selection and hints clear without stale visual state. | |
 
 ## M3 List QA Result
 

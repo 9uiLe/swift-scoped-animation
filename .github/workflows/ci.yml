@@ -7,7 +7,10 @@ on:
 
 jobs:
   build-test-docs:
-    runs-on: macos-latest
+    # Pinned: macos-latest can still resolve to macos-15 (default Xcode 16.4 /
+    # Swift 6.1), which cannot parse this package's swift-tools-version 6.2.
+    # macos-26 ships Xcode 26.x by default.
+    runs-on: macos-26
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

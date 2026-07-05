@@ -92,15 +92,30 @@ only when the transaction stamp belongs to that exact scope. A descendant scope
 therefore blocks an ancestor scope's value-driven and proxy-driven animation.
 
 That behavior is intentional, but it is easy to misread. One subtree cannot
-currently express multiple `(animation, value)` pairs by nesting scopes. Split
-the UI into sibling scoped subtrees when each trigger can own a different visual
-layer, or keep a small documented raw `.animation(_:value:)` exception until the
-API grows a multi-trigger form.
+express multiple `(animation, value)` pairs by nesting scopes. Split the UI into
+sibling scoped subtrees when each trigger can own a different visual layer, or
+use the multi-trigger initializer when several triggers affect the same subtree:
+
+```swift
+AnimationScope(
+  name: "Board",
+  triggers: [
+    .animation(.easeOut(duration: 0.12), value: selectedPoints),
+    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintPoints),
+  ]
+) {
+  BoardView()
+}
+```
+
+When multiple trigger values change in the same transaction, the trigger closest
+to the start of the `triggers` array wins. In DEBUG builds,
+`multiTriggerConflict` reports when a lower-priority trigger was ignored.
 
 In DEBUG builds, `crossScopeAnimationStrip` reports when one `AnimationScope`
 boundary strips another scope's stamped animation. Treat that warning as a
-signal to flatten the scopes, split the subtree, or document an intentional
-exception.
+signal to flatten the scopes, split the subtree, switch to multi-trigger, or
+document an intentional exception.
 
 ## Composition Guide
 

@@ -1,6 +1,7 @@
 #if DEBUG
   import Foundation
   import OSLog
+  import SwiftUI
 
   struct AnimationScopeWarning: Equatable, Sendable {
     let siteID: String
@@ -115,9 +116,43 @@
         title: "AnimationScope boundary stripped another scope's animation",
         message: "AnimationScope \(strippingScope) stripped a stamped animation from "
           + "AnimationScope \(strippedScope). Nested AnimationScope boundaries block ancestor "
-          + "scope animations. Use sibling scopes for separate subtrees; one subtree with "
-          + "multiple triggers cannot be represented by nesting."
+          + "scope animations. Use sibling scopes for separate subtrees, or "
+          + "`AnimationScope(name:triggers:)` when multiple `(animation, value)` pairs affect "
+          + "the same subtree."
       )
+    }
+
+    static func multiTriggerConflict(
+      site: AnimationScopeRuntimeWarning.Site,
+      scopeName: String?,
+      adoptedTriggerIndex: Int,
+      adoptedAnimation: Animation,
+      rejectedTriggerIndices: [Int],
+      rejectedAnimations: [Animation]
+    ) -> Self {
+      let scope = scopeDisplayName(scopeName)
+      let adoptedDescription = triggerDescription(
+        index: adoptedTriggerIndex,
+        animation: adoptedAnimation
+      )
+      let rejectedDescriptions = zip(rejectedTriggerIndices, rejectedAnimations)
+        .map { index, animation in
+          triggerDescription(index: index, animation: animation)
+        }
+        .joined(separator: ", ")
+
+      return AnimationScopeWarning(
+        siteID: site.id,
+        title: "AnimationScope multi-trigger conflict",
+        message:
+          "AnimationScope \(scope) resolved a simultaneous trigger change in favor of "
+          + "\(adoptedDescription). Ignored trigger(s): \(rejectedDescriptions). Put the "
+          + "primary motion first in the `triggers` array."
+      )
+    }
+
+    private static func triggerDescription(index: Int, animation: Animation) -> String {
+      "trigger[\(index)] (\(String(describing: animation)))"
     }
 
     private static func scopeDisplayName(_ name: String?) -> String {
