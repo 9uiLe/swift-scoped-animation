@@ -1,14 +1,11 @@
 name: CI
 
 on:
+  # No paths filter on pull_request: this job is a required status check, so it
+  # must report on every PR. A paths-filtered PR (docs-only, etc.) would never
+  # start the run, leaving the required check permanently pending and the PR
+  # unmergeable. The push trigger keeps its paths filter to save minutes.
   pull_request:
-    paths:
-      - "Sources/**"
-      - "Tests/**"
-      - "Examples/**"
-      - "Package.swift"
-      - ".swift-format"
-      - ".github/workflows/ci.yml"
   push:
     branches: [master]
     paths:
@@ -23,6 +20,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
+# Least privilege: this workflow only reads the repository. Narrowing the
+# GITHUB_TOKEN here limits blast radius if a build step or action is compromised.
+permissions:
+  contents: read
+
 jobs:
   build-test-docs:
     # Pinned: macos-latest can still resolve to macos-15 (default Xcode 16.4 /
@@ -31,13 +33,13 @@ jobs:
     runs-on: macos-26
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Show Xcode version
         run: xcodebuild -version
 
       - name: Cache SwiftPM build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .build
           key: spm-${{ runner.os }}-${{ hashFiles('Package.swift', 'Sources/**/*.swift', 'Tests/**/*.swift') }}
@@ -45,7 +47,7 @@ jobs:
             spm-${{ runner.os }}-
 
       - name: Cache DerivedData
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: DerivedData
           key: deriveddata-${{ runner.os }}-${{ hashFiles('Package.swift', 'Sources/**/*.swift', 'Tests/**/*.swift', 'Examples/**/*.swift') }}

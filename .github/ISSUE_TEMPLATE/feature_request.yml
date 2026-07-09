@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest an enhancement or new capability
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do that ScopedAnimation does not support today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: >
+        How might this work? Note that changes to public API, semantics, or the
+        roadmap must be reflected in HANDOFF.md — see CONTRIBUTING.md.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches, workarounds, or prior art you have looked at.
+
+  - type: checkboxes
+    id: scope-ack
+    attributes:
+      label: Scope acknowledgement
+      options:
+        - label: >
+            This request fits the library's model of blocking + detection, not
+            total animation containment.
+          required: true
