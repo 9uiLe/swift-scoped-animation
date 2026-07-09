@@ -1,0 +1,82 @@
+name: Bug report
+description: Report incorrect behavior in ScopedAnimation
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please remember that
+        ScopedAnimation is about **blocking + detection**, not total animation
+        containment — SwiftUI state updates can still affect any view that reads
+        changed state. See the README before reporting "animation leaked".
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+      placeholder: When I wrap ... in an AnimationScope, I expected ... but got ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps or, ideally, a small self-contained SwiftUI snippet.
+      placeholder: |
+        1. ...
+        2. ...
+      render: swift
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: ScopedAnimation version
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Where did you observe this? (select all that apply)
+      multiple: true
+      options:
+        - iOS
+        - macOS
+        - tvOS
+        - watchOS
+        - visionOS
+    validations:
+      required: true
+
+  - type: input
+    id: toolchain
+    attributes:
+      label: Xcode / Swift version
+      placeholder: "Xcode 26.0 / Swift 6.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: build-config
+    attributes:
+      label: Build configuration
+      options:
+        - DEBUG
+        - RELEASE
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Diagnostics output (optional)
+      description: Any relevant DEBUG diagnostics, console output, or stack traces.
+      render: shell
