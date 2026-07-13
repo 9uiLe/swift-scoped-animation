@@ -1,15 +1,17 @@
+import Observation
 import ScopedAnimation
 import SwiftUI
+import os
 
 struct ListQAView: View {
-  @StateObject private var status = ListQAStatus()
+  @State private var status = ListQAStatus()
   @State private var selectedCheck = ListQACheck.scope
   @State private var scopePulse = false
   @State private var barrierPulse = false
   @State private var reusePulse = false
   @State private var didStartAutomaticRun = false
 
-  private let rows = Array(0..<80)
+  private let rows = 0..<80
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -40,7 +42,12 @@ struct ListQAView: View {
           .buttonStyle(.bordered)
         }
 
-        currentList
+        ListQARows(
+          check: selectedCheck,
+          active: selectedPulse,
+          rows: rows,
+          counters: status.counters
+        )
       }
       .navigationTitle("List QA")
       .task {
@@ -55,27 +62,14 @@ struct ListQAView: View {
     }
   }
 
-  @ViewBuilder
-  private var currentList: some View {
+  private var selectedPulse: Bool {
     switch selectedCheck {
     case .scope:
-      AnimationScope(.easeInOut(duration: 0.7), value: scopePulse, name: "List wrapper") {
-        List(rows.prefix(18), id: \.self) { row in
-          QAListRow(row: row, active: scopePulse, check: .scope, status: status, tint: .blue)
-        }
-      }
+      scopePulse
     case .barrier:
-      List(rows.prefix(18), id: \.self) { row in
-        QAListRow(row: row, active: barrierPulse, check: .barrier, status: status, tint: .red)
-          .animationBarrier()
-      }
+      barrierPulse
     case .reuse:
-      AnimationScope(.easeInOut(duration: 0.7), value: reusePulse, name: "Reuse list") {
-        List(rows, id: \.self) { row in
-          QAListRow(row: row, active: reusePulse, check: .reuse, status: status, tint: .green)
-            .id(row)
-        }
-      }
+      reusePulse
     }
   }
 
@@ -89,8 +83,8 @@ struct ListQAView: View {
   @MainActor
   private func run(_ check: ListQACheck, proxy: ScrollViewProxy) async {
     selectedCheck = check
-    status.begin(check)
     try? await Task.sleep(for: .milliseconds(250))
+    status.begin(check)
 
     switch check {
     case .scope:
@@ -122,7 +116,7 @@ struct ListQAView: View {
   }
 }
 
-private enum ListQACheck: String, CaseIterable, Identifiable {
+private enum ListQACheck: String, CaseIterable, Identifiable, Sendable {
   case scope
   case barrier
   case reuse
@@ -143,34 +137,73 @@ private enum ListQACheck: String, CaseIterable, Identifiable {
   }
 }
 
-@MainActor
-private final class ListQAStatus: ObservableObject {
-  @Published private(set) var scope = ListQAResult()
-  @Published private(set) var barrier = ListQAResult()
-  @Published private(set) var reuse = ListQAResult()
+private struct ListQARows: View {
+  let check: ListQACheck
+  let active: Bool
+  let rows: Range<Int>
+  let counters: ListQATransactionCounters
 
-  private var activeCheck: ListQACheck?
+  @ViewBuilder
+  var body: some View {
+    switch check {
+    case .scope:
+      AnimationScope(.easeInOut(duration: 0.7), value: active, name: "List wrapper") {
+        List(rows.prefix(18), id: \.self) { row in
+          QAListRow(
+            row: row,
+            active: active,
+            check: .scope,
+            counters: counters,
+            tint: .blue
+          )
+        }
+      }
+    case .barrier:
+      List(rows.prefix(18), id: \.self) { row in
+        QAListRow(
+          row: row,
+          active: active,
+          check: .barrier,
+          counters: counters,
+          tint: .red
+        )
+        .animationBarrier()
+      }
+    case .reuse:
+      AnimationScope(.easeInOut(duration: 0.7), value: active, name: "Reuse list") {
+        List(rows, id: \.self) { row in
+          QAListRow(
+            row: row,
+            active: active,
+            check: .reuse,
+            counters: counters,
+            tint: .green
+          )
+          .id(row)
+        }
+      }
+    }
+  }
+}
+
+@MainActor @Observable
+private final class ListQAStatus {
+  private(set) var scope = ListQAResult()
+  private(set) var barrier = ListQAResult()
+  private(set) var reuse = ListQAResult()
+
+  @ObservationIgnored let counters = ListQATransactionCounters()
 
   func begin(_ check: ListQACheck) {
-    activeCheck = check
+    counters.begin(check)
     set(ListQAResult(isRunning: true), for: check)
   }
 
-  func record(_ check: ListQACheck, hasAnimation: Bool) {
-    guard activeCheck == check else {
-      return
-    }
-
-    var result = result(for: check)
-    result.observedTransactions += 1
-    if hasAnimation {
-      result.animatedTransactions += 1
-    }
-    set(result, for: check)
-  }
-
   func finish(_ check: ListQACheck) {
+    let counts = counters.finish(check)
     var result = result(for: check)
+    result.observedTransactions = counts.observedTransactions
+    result.animatedTransactions = counts.animatedTransactions
     result.isRunning = false
     result.didRun = true
     switch check {
@@ -180,7 +213,6 @@ private final class ListQAStatus: ObservableObject {
       result.passed = result.observedTransactions > 0 && result.animatedTransactions == 0
     }
     set(result, for: check)
-    activeCheck = nil
   }
 
   private func result(for check: ListQACheck) -> ListQAResult {
@@ -206,7 +238,50 @@ private final class ListQAStatus: ObservableObject {
   }
 }
 
-private struct ListQAResult {
+private final class ListQATransactionCounters: Sendable {
+  private struct State: Sendable {
+    var activeCheck: ListQACheck?
+    var observedTransactions = 0
+    var animatedTransactions = 0
+  }
+
+  private let state = OSAllocatedUnfairLock(initialState: State())
+
+  func begin(_ check: ListQACheck) {
+    state.withLock { state in
+      state = State(activeCheck: check)
+    }
+  }
+
+  func record(_ check: ListQACheck, hasAnimation: Bool) {
+    state.withLock { state in
+      guard state.activeCheck == check else {
+        return
+      }
+
+      state.observedTransactions += 1
+      if hasAnimation {
+        state.animatedTransactions += 1
+      }
+    }
+  }
+
+  func finish(_ check: ListQACheck) -> (
+    observedTransactions: Int,
+    animatedTransactions: Int
+  ) {
+    state.withLock { state in
+      guard state.activeCheck == check else {
+        return (0, 0)
+      }
+
+      state.activeCheck = nil
+      return (state.observedTransactions, state.animatedTransactions)
+    }
+  }
+}
+
+private struct ListQAResult: Equatable {
   var observedTransactions = 0
   var animatedTransactions = 0
   var didRun = false
@@ -239,7 +314,7 @@ private struct ListQAResult {
 }
 
 private struct ListQAStatusPanel: View {
-  @ObservedObject var status: ListQAStatus
+  let status: ListQAStatus
 
   var body: some View {
     HStack(spacing: 8) {
@@ -279,7 +354,7 @@ private struct QAListRow: View {
   let row: Int
   let active: Bool
   let check: ListQACheck
-  @ObservedObject var status: ListQAStatus
+  let counters: ListQATransactionCounters
   let tint: Color
 
   var body: some View {
@@ -301,10 +376,7 @@ private struct QAListRow: View {
     }
     .frame(height: 54)
     .transaction { transaction in
-      let hasAnimation = transaction.animation != nil
-      Task { @MainActor in
-        status.record(check, hasAnimation: hasAnimation)
-      }
+      counters.record(check, hasAnimation: transaction.animation != nil)
     }
   }
 }

@@ -4,12 +4,12 @@ Manual QA is performed on the iOS simulator unless noted otherwise.
 
 ## Environment
 
-- Date: 2026-07-03
-- Device: iPhone 17 Simulator
+- Date: 2026-07-14
+- Device: iPhone 17 Simulator (`5A6604DB-0328-4DFD-89EF-6A5EEE0CE974`)
 - OS: iOS 26.5
 - App: `Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj`
 - Build:
-  `xcodebuild build -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj -scheme ScopedAnimationExample -destination 'platform=iOS Simulator,name=iPhone 17'`
+  `xcodebuild build -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj -scheme ScopedAnimationExample -destination 'platform=iOS Simulator,id=5A6604DB-0328-4DFD-89EF-6A5EEE0CE974'`
 
 ## Checklist
 
@@ -28,27 +28,32 @@ Manual QA is performed on the iOS simulator unless noted otherwise.
 
 ## M3 List QA Result
 
+Revalidated on 2026-07-14 after replacing per-row observable updates with
+lock-protected transaction counters and begin/finish status snapshots.
+
 Command sequence:
 
 ```sh
+simulator_udid=5A6604DB-0328-4DFD-89EF-6A5EEE0CE974
+
 xcodebuild build -quiet \
   -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj \
   -scheme ScopedAnimationExample \
-  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -destination "platform=iOS Simulator,id=${simulator_udid}" \
   -derivedDataPath .build/ScopedAnimationExampleDerivedData
 
-xcrun simctl install booted \
+xcrun simctl install "${simulator_udid}" \
   .build/ScopedAnimationExampleDerivedData/Build/Products/Debug-iphonesimulator/ScopedAnimationExample.app
 
-xcrun simctl launch booted dev.scopedanimation.example --screen=list-qa --auto-list-qa
-xcrun simctl io booted screenshot .build/list-qa-auto.png
+xcrun simctl launch "${simulator_udid}" dev.scopedanimation.example --screen=list-qa --auto-list-qa
+xcrun simctl io "${simulator_udid}" screenshot .build/list-qa-auto.png
 ```
 
 Observed screen state after the automatic List QA run:
 
 | Check | Observed State | Result |
 | --- | --- | --- |
-| `AnimationScope` wrapping `List` | `Scope` displayed `Pass`, with `6/12` animated/observed row transactions. | Pass |
+| `AnimationScope` wrapping `List` | `Scope` displayed `Pass`, with `6/6` animated/observed row transactions. | Pass |
 | `animationBarrier()` in rows | `Barrier` displayed `Pass`, with `0/6` animated/observed row transactions. | Pass |
 | Cell reuse after scroll away/back | `Reuse` displayed `Pass`, with `7/7` animated/observed row transactions after the return pulse. | Pass |
 
