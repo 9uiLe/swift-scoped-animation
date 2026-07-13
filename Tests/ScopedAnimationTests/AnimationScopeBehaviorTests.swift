@@ -23,6 +23,105 @@
       XCTAssertTrue(recorder.hasAnimation("s7-child"))
     }
 
+    func testS8ValueTransactionHookOnlyAnimatesItsTrackedValue() {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      _ = host(S8ValueTransactionProbeView(model: model, recorder: recorder))
+      pumpRunLoop()
+
+      recorder.clear()
+      model.outer.toggle()
+      pumpRunLoop()
+      recorder.dump("S8_VALUE_TRANSACTION_UNRELATED")
+
+      XCTAssertFalse(recorder.hasAnimation("s8-child"))
+
+      recorder.clear()
+      model.inner.toggle()
+      pumpRunLoop()
+      recorder.dump("S8_VALUE_TRANSACTION_TRACKED")
+
+      XCTAssertTrue(recorder.hasAnimation("s8-child"))
+    }
+
+    func testValueDrivenScopeSuppliesAnimationAndStampToTransitionInsertion() {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      _ = host(TransitionProbeView(model: model, recorder: recorder))
+      pumpRunLoop()
+
+      recorder.clear()
+      model.inner.toggle()
+      pumpRunLoop()
+      recorder.dump("M1_TRANSITION_INSERTION")
+
+      XCTAssertTrue(recorder.hasAnimation("transition-container"))
+      XCTAssertTrue(recorder.hasStampName("transition-container", "Transition"))
+    }
+
+    func testValueDrivenScopeHonorsDisabledAnimations() {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      _ = host(DisabledValueScopeProbeView(model: model, recorder: recorder))
+      pumpRunLoop()
+
+      recorder.clear()
+      model.inner.toggle()
+      pumpRunLoop()
+      recorder.dump("M1_VALUE_DISABLED")
+
+      XCTAssertFalse(recorder.hasAnimation("disabled-value-child"))
+      XCTAssertFalse(recorder.hasStamp("disabled-value-child"))
+      XCTAssertTrue(
+        recorder.matching("disabled-value-child").contains { $0.disablesAnimations }
+      )
+    }
+
+    func testEmptyTriggerScopeBehavesAsNamedBoundary() {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      _ = host(EmptyTriggerScopeProbeView(model: model, recorder: recorder))
+      pumpRunLoop()
+
+      recorder.clear()
+      withAnimation(.linear(duration: 0.2)) {
+        model.outer.toggle()
+      }
+      pumpRunLoop()
+      recorder.dump("M2_EMPTY_TRIGGER_BOUNDARY")
+
+      XCTAssertFalse(recorder.hasAnimation("empty-trigger-child"))
+      XCTAssertFalse(recorder.hasStamp("empty-trigger-child"))
+    }
+
+    func testEmptyTriggerScopePreservesAncestorStampWithoutRestoringAnimation() throws {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      let proxyBox = ProxyBox()
+      _ = host(
+        StampedEmptyTriggerScopeProbeView(
+          model: model,
+          recorder: recorder,
+          proxyBox: proxyBox
+        )
+      )
+      pumpRunLoop()
+
+      guard let proxy = proxyBox.proxy else {
+        XCTFail("Expected proxy to be captured")
+        return
+      }
+
+      recorder.clear()
+      proxy.animate {
+        model.outer.toggle()
+      }
+      pumpRunLoop()
+
+      XCTAssertFalse(recorder.hasAnimation("stamped-empty-trigger-child"))
+      XCTAssertTrue(recorder.hasStampName("stamped-empty-trigger-child", "Outer"))
+    }
+
     func testBarrierStripsExplicitAndImplicitIncomingAnimations() {
       let model = ProbeModel()
       let recorder = TransactionRecorder()
@@ -231,6 +330,33 @@
       )
     }
 
+    func testProxyDrivenScopeHonorsDisabledAnimations() throws {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      let proxyBox = ProxyBox()
+      _ = host(
+        DisabledProxyScopeProbeView(model: model, recorder: recorder, proxyBox: proxyBox)
+      )
+      pumpRunLoop()
+
+      guard let proxy = proxyBox.proxy else {
+        XCTFail("Expected proxy to be captured")
+        return
+      }
+
+      recorder.clear()
+      proxy.animate {
+        model.inner.toggle()
+      }
+      pumpRunLoop()
+      recorder.dump("M1_PROXY_DISABLED")
+
+      XCTAssertFalse(recorder.hasAnimation("disabled-proxy-child"))
+      XCTAssertTrue(
+        recorder.matching("disabled-proxy-child").contains { $0.disablesAnimations }
+      )
+    }
+
     func testLazyVStackRowsRespectBarrier() {
       let model = ProbeModel()
       let recorder = TransactionRecorder()
@@ -400,6 +526,38 @@
 
             withAnimation(.linear(duration: 0.2)) {
               model.outer.toggle()
+            }
+            pumpRunLoop()
+          }
+        )
+
+        XCTAssertEqual(warningRecorder.warnings.count, 1)
+      }
+
+      func testDetectAnimationLeaksDebouncesAcrossSeparateViewInstances() {
+        let firstModel = ProbeModel()
+        let remountedModel = ProbeModel()
+        let warningRecorder = WarningRecorder()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+
+        AnimationScopeRuntimeWarning.resetForTesting()
+        AnimationScopeRuntimeWarning.withTestSink(
+          debounceInterval: 10,
+          { warningRecorder.record($0) },
+          operation: {
+            _ = host(LeakDetectorProbeView(model: firstModel))
+            pumpRunLoop()
+
+            withAnimation(.linear(duration: 0.2)) {
+              firstModel.outer.toggle()
+            }
+            pumpRunLoop()
+
+            _ = host(LeakDetectorProbeView(model: remountedModel))
+            pumpRunLoop()
+
+            withAnimation(.linear(duration: 0.2)) {
+              remountedModel.outer.toggle()
             }
             pumpRunLoop()
           }
@@ -588,6 +746,106 @@
       XCTAssertFalse(recorder.hasStamp("multi-trigger-child"))
     }
 
+    func testThreeTriggerScopePrefersFirstChangedTrigger() {
+      let model = MultiTriggerProbeModel()
+      let recorder = TransactionRecorder()
+      let selectionAnimation = Animation.easeOut(duration: 0.12)
+      let hintAnimation = Animation.spring(response: 0.35, dampingFraction: 0.7)
+      let tertiaryAnimation = Animation.linear(duration: 0.91)
+      _ = host(
+        ThreeTriggerProbeView(
+          model: model,
+          recorder: recorder,
+          selectionAnimation: selectionAnimation,
+          hintAnimation: hintAnimation,
+          tertiaryAnimation: tertiaryAnimation
+        )
+      )
+      pumpRunLoop()
+
+      recorder.clear()
+      model.hintPoints = 1
+      model.tertiaryPoints = 1
+      pumpRunLoop()
+      recorder.dump("M2_THREE_TRIGGER_PRIORITY")
+
+      XCTAssertTrue(
+        recorder.hasAnimationDescription(
+          "three-trigger-child",
+          String(describing: hintAnimation)
+        )
+      )
+      XCTAssertFalse(
+        recorder.hasAnimationDescription(
+          "three-trigger-child",
+          String(describing: tertiaryAnimation)
+        )
+      )
+    }
+
+    func testDynamicTriggerCountPreservesIdentityFromOneToTwo() {
+      assertDynamicTriggerIdentity(initialCount: 1, updatedCount: 2)
+    }
+
+    func testDynamicTriggerCountPreservesIdentityFromZeroToOne() {
+      assertDynamicTriggerIdentity(initialCount: 0, updatedCount: 1)
+    }
+
+    func testDynamicTriggerCountPreservesIdentityFromOneToZero() {
+      assertDynamicTriggerIdentity(initialCount: 1, updatedCount: 0)
+    }
+
+    func testDynamicTriggerCountPreservesIdentityFromTwoToThree() {
+      assertDynamicTriggerIdentity(initialCount: 2, updatedCount: 3)
+    }
+
+    func testDynamicTriggerCountPreservesIdentityFromThreeToTwo() {
+      assertDynamicTriggerIdentity(initialCount: 3, updatedCount: 2)
+    }
+
+    func testDynamicTriggerReorderingPreservesIdentityAndUsesNewArrayPriority() {
+      let model = DynamicTriggerProbeModel(triggerCount: 3)
+      model.first = 1
+      model.second = 2
+      model.third = 3
+      let identityRecorder = ViewIdentityRecorder()
+      let transactionRecorder = TransactionRecorder()
+      let expectedAnimation = Animation.linear(duration: 0.33)
+      _ = host(
+        DynamicTriggerProbeView(
+          model: model,
+          identityRecorder: identityRecorder,
+          transactionRecorder: transactionRecorder
+        )
+      )
+      pumpRunLoop()
+
+      transactionRecorder.clear()
+      #if DEBUG
+        AnimationScopeRuntimeWarning.resetForTesting()
+        defer { AnimationScopeRuntimeWarning.resetForTesting() }
+        AnimationScopeRuntimeWarning.withTestSink(
+          { _ in },
+          operation: {
+            model.isReversed = true
+            pumpRunLoop()
+          }
+        )
+      #else
+        model.isReversed = true
+        pumpRunLoop()
+      #endif
+      transactionRecorder.dump("M2_DYNAMIC_TRIGGER_REORDER")
+
+      XCTAssertEqual(identityRecorder.distinctIdentities.count, 1)
+      XCTAssertTrue(
+        transactionRecorder.hasAnimationDescription(
+          "dynamic-trigger-child",
+          String(describing: expectedAnimation)
+        )
+      )
+    }
+
     func testIssue1BoardCaseUsesMultiTriggerScopeForSelectionAndHint() {
       let model = MultiTriggerProbeModel()
       let recorder = TransactionRecorder()
@@ -631,6 +889,8 @@
         let model = MultiTriggerProbeModel()
         let recorder = TransactionRecorder()
         let warningRecorder = WarningRecorder()
+        let selectionAnimation = Animation.easeOut(duration: 0.12)
+        let hintAnimation = Animation.spring(response: 0.35, dampingFraction: 0.7)
         defer { AnimationScopeRuntimeWarning.resetForTesting() }
 
         AnimationScopeRuntimeWarning.resetForTesting()
@@ -641,8 +901,8 @@
               MultiTriggerProbeView(
                 model: model,
                 recorder: recorder,
-                selectionAnimation: Animation.easeOut(duration: 0.12),
-                hintAnimation: Animation.spring(response: 0.35, dampingFraction: 0.7)
+                selectionAnimation: selectionAnimation,
+                hintAnimation: hintAnimation
               )
             )
             pumpRunLoop()
@@ -662,6 +922,22 @@
         )
         XCTAssertTrue(warningRecorder.warnings.first?.message.contains("trigger[0]") == true)
         XCTAssertTrue(warningRecorder.warnings.first?.message.contains("trigger[1]") == true)
+        XCTAssertTrue(
+          recorder.hasAnimationDescription(
+            "multi-trigger-child",
+            String(describing: selectionAnimation)
+          )
+        )
+        XCTAssertTrue(
+          warningRecorder.warnings.first?.message.contains(String(describing: selectionAnimation))
+            == true
+        )
+        XCTAssertFalse(
+          recorder.hasAnimationDescription(
+            "multi-trigger-child",
+            String(describing: hintAnimation)
+          )
+        )
       }
     #endif
 
@@ -700,6 +976,64 @@
           String(describing: innerAnimation)
         )
       )
+    }
+
+    func testValueDrivenScopeRestampsEqualAnimationForInnerScopeOwnership() throws {
+      let model = ProbeModel()
+      let recorder = TransactionRecorder()
+      let proxyBox = ProxyBox()
+      let sharedAnimation = Animation.linear(duration: 0.2)
+      _ = host(
+        ValueAttributionProbeView(
+          model: model,
+          recorder: recorder,
+          proxyBox: proxyBox,
+          innerAnimation: sharedAnimation
+        )
+      )
+      pumpRunLoop()
+
+      guard let proxy = proxyBox.proxy else {
+        XCTFail("Expected proxy to be captured")
+        return
+      }
+
+      recorder.clear()
+      proxy.animate(sharedAnimation) {
+        model.inner.toggle()
+      }
+      pumpRunLoop()
+      recorder.dump("M2_EQUAL_ANIMATION_ATTRIBUTION")
+
+      XCTAssertTrue(recorder.hasAnimation("attribution-child"))
+      XCTAssertTrue(recorder.hasStampName("attribution-child", "inner-value"))
+      XCTAssertTrue(
+        recorder.hasStampAnimationDescription(
+          "attribution-child",
+          String(describing: sharedAnimation)
+        )
+      )
+    }
+
+    private func assertDynamicTriggerIdentity(initialCount: Int, updatedCount: Int) {
+      let model = DynamicTriggerProbeModel(triggerCount: initialCount)
+      let identityRecorder = ViewIdentityRecorder()
+      let transactionRecorder = TransactionRecorder()
+      _ = host(
+        DynamicTriggerProbeView(
+          model: model,
+          identityRecorder: identityRecorder,
+          transactionRecorder: transactionRecorder
+        )
+      )
+      pumpRunLoop()
+
+      transactionRecorder.clear()
+      model.triggerCount = updatedCount
+      pumpRunLoop()
+
+      XCTAssertEqual(identityRecorder.distinctIdentities.count, 1)
+      XCTAssertFalse(transactionRecorder.hasAnimation("dynamic-trigger-child"))
     }
   }
 
@@ -755,6 +1089,92 @@
         .transaction { transaction in
           transaction.animation = nil
         }
+    }
+  }
+
+  @MainActor
+  private struct S8ValueTransactionProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+
+    var body: some View {
+      Text("s8")
+        .opacity(model.inner ? 0.2 : 1)
+        .scaleEffect(model.outer ? 1.2 : 1)
+        .transaction { recorder.record("s8-child", $0) }
+        .transaction(value: model.inner) { transaction in
+          guard !transaction.disablesAnimations else {
+            return
+          }
+          transaction.animation = .linear(duration: 0.2)
+        }
+    }
+  }
+
+  @MainActor
+  private struct TransitionProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+
+    var body: some View {
+      AnimationScope(.easeInOut(duration: 0.2), value: model.inner, name: "Transition") {
+        VStack {
+          if model.inner {
+            Text("transition")
+              .transition(.opacity)
+          }
+        }
+        .transaction { recorder.record("transition-container", $0) }
+      }
+    }
+  }
+
+  @MainActor
+  private struct DisabledValueScopeProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+
+    var body: some View {
+      AnimationScope(.linear(duration: 0.2), value: model.inner, name: "Disabled") {
+        Text("disabled-value")
+          .opacity(model.inner ? 0.2 : 1)
+          .transaction { recorder.record("disabled-value-child", $0) }
+      }
+      .transaction { transaction in
+        transaction.disablesAnimations = true
+      }
+    }
+  }
+
+  @MainActor
+  private struct EmptyTriggerScopeProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+
+    var body: some View {
+      AnimationScope(name: "Empty", triggers: []) {
+        Text("empty-trigger")
+          .opacity(model.outer ? 0.2 : 1)
+          .transaction { recorder.record("empty-trigger-child", $0) }
+      }
+    }
+  }
+
+  @MainActor
+  private struct StampedEmptyTriggerScopeProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+    let proxyBox: ProxyBox
+
+    var body: some View {
+      AnimationScope(.linear(duration: 0.2), name: "Outer") { scope in
+        AnimationScope(name: "Empty", triggers: []) {
+          Text("stamped-empty-trigger")
+            .opacity(model.outer ? 0.2 : 1)
+            .transaction { recorder.record("stamped-empty-trigger-child", $0) }
+        }
+        .onAppear { proxyBox.proxy = scope }
+      }
     }
   }
 
@@ -935,6 +1355,25 @@
   }
 
   @MainActor
+  private struct DisabledProxyScopeProbeView: View {
+    @ObservedObject var model: ProbeModel
+    let recorder: TransactionRecorder
+    let proxyBox: ProxyBox
+
+    var body: some View {
+      AnimationScope(.linear(duration: 0.2), name: "Disabled proxy") { scope in
+        Text("disabled-proxy")
+          .opacity(model.inner ? 0.2 : 1)
+          .transaction { recorder.record("disabled-proxy-child", $0) }
+          .onAppear { proxyBox.proxy = scope }
+      }
+      .transaction { transaction in
+        transaction.disablesAnimations = true
+      }
+    }
+  }
+
+  @MainActor
   private struct LazyBarrierProbeView: View {
     @ObservedObject var model: ProbeModel
     let recorder: TransactionRecorder
@@ -996,7 +1435,34 @@
   private final class MultiTriggerProbeModel: ObservableObject {
     @Published var selectedPoints = 0
     @Published var hintPoints = 0
+    @Published var tertiaryPoints = 0
     @Published var unrelated = false
+  }
+
+  @MainActor
+  private final class DynamicTriggerProbeModel: ObservableObject {
+    @Published var triggerCount: Int
+    @Published var first = 0
+    @Published var second = 0
+    @Published var third = 0
+    @Published var isReversed = false
+
+    init(triggerCount: Int) {
+      self.triggerCount = triggerCount
+    }
+  }
+
+  @MainActor
+  private final class ViewIdentityRecorder {
+    private(set) var identities: [UUID] = []
+
+    var distinctIdentities: Set<UUID> {
+      Set(identities)
+    }
+
+    func record(_ identity: UUID) {
+      identities.append(identity)
+    }
   }
 
   @MainActor
@@ -1019,6 +1485,76 @@
           .opacity(model.hintPoints > 0 ? 0.6 : (model.unrelated ? 0.8 : 1))
           .transaction { recorder.record("multi-trigger-child", $0) }
       }
+    }
+  }
+
+  @MainActor
+  private struct ThreeTriggerProbeView: View {
+    @ObservedObject var model: MultiTriggerProbeModel
+    let recorder: TransactionRecorder
+    let selectionAnimation: Animation
+    let hintAnimation: Animation
+    let tertiaryAnimation: Animation
+
+    var body: some View {
+      AnimationScope(
+        name: "Three triggers",
+        triggers: [
+          .animation(selectionAnimation, value: model.selectedPoints),
+          .animation(hintAnimation, value: model.hintPoints),
+          .animation(tertiaryAnimation, value: model.tertiaryPoints),
+        ]
+      ) {
+        Text("three-trigger")
+          .scaleEffect(model.selectedPoints > 0 ? 1.1 : 1)
+          .opacity(model.hintPoints > 0 ? 0.6 : 1)
+          .offset(x: model.tertiaryPoints > 0 ? 8 : 0)
+          .transaction { recorder.record("three-trigger-child", $0) }
+      }
+    }
+  }
+
+  @MainActor
+  private struct DynamicTriggerProbeView: View {
+    @ObservedObject var model: DynamicTriggerProbeModel
+    let identityRecorder: ViewIdentityRecorder
+    let transactionRecorder: TransactionRecorder
+
+    var body: some View {
+      let availableTriggers: [AnimationTrigger] = [
+        .animation(.easeOut(duration: 0.11), value: model.first),
+        .animation(.easeInOut(duration: 0.22), value: model.second),
+        .animation(.linear(duration: 0.33), value: model.third),
+      ]
+      let orderedTriggers =
+        model.isReversed ? Array(availableTriggers.reversed()) : availableTriggers
+
+      AnimationScope(
+        name: "Dynamic triggers",
+        triggers: Array(orderedTriggers.prefix(model.triggerCount))
+      ) {
+        StatefulIdentityProbeView(
+          topologyDescription: "\(model.triggerCount)-\(model.isReversed)",
+          identityRecorder: identityRecorder,
+          transactionRecorder: transactionRecorder
+        )
+      }
+    }
+  }
+
+  @MainActor
+  private struct StatefulIdentityProbeView: View {
+    let topologyDescription: String
+    let identityRecorder: ViewIdentityRecorder
+    let transactionRecorder: TransactionRecorder
+    @State private var identity = UUID()
+
+    var body: some View {
+      Text("identity-\(topologyDescription)")
+        .transaction { transactionRecorder.record("dynamic-trigger-child", $0) }
+        .onAppear {
+          identityRecorder.record(identity)
+        }
     }
   }
 

@@ -1,7 +1,10 @@
 # Multi-Trigger AnimationScope API Spike
 
 Date: 2026-07-04
-Status: Design spike only. No implementation or public API change is included.
+Status: Historical. Superseded by HANDOFF §4.1-6 and the `triggers:` initializer
+shipped in 0.2.0. The empty-array contract and the structurally stable resolver
+were finalized on 2026-07-14; the proposals below remain an implementation
+decision record, not current API guidance.
 
 ## Summary
 

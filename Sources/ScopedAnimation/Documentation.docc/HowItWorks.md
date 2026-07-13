@@ -56,11 +56,34 @@ If multiple trigger values change in the same transaction, the trigger closest t
 the start of the array wins. DEBUG builds report `multiTriggerConflict` when a
 lower-priority trigger was ignored.
 
+All trigger counts use one structurally stable resolver modifier. The resolver
+compares the current values with the last snapshot, explicitly selects the first
+changed array index, and uses that one result for the transaction animation,
+scope stamp, and conflict warning. It does not depend on the nesting order of
+SwiftUI animation modifiers.
+
+Keep the trigger array's composition and order stable:
+
+- Changing the number of triggers is treated as a structural update. That update
+  does not animate, but the content view keeps its identity and local state.
+- Reordering uses positional comparison. The new array position determines both
+  which value appears changed and its conflict priority.
+- An empty trigger array creates a named boundary. It strips incoming animation,
+  restores none, preserves the incoming stamp for descendants, and participates
+  in the DEBUG boundary overlay. It does not emit the unscoped-transaction
+  warning produced by `animationBarrier()`, so prefer a barrier when a label is
+  unnecessary.
+
 ## Value-Driven Scopes
 
-The value-driven initializer applies SwiftUI's `.animation(_:value:)` behavior inside the boundary and stamps the resulting transaction. The stamp is downstream-only: views above the scope do not see it.
+The value-driven initializer is a one-trigger convenience over the same
+value-gated resolver used by multi-trigger scopes. When its value changes, the
+resolver sets the animation and scope stamp on that update's transaction. The
+stamp is downstream-only: views above the scope do not see it.
 
-If a scoped `.animation(_:value:)` transaction arrives with no stamp, or with a stamp that carries a different animation, the scope stamps it again so the animation is attributed to the scope that actually created the value-driven animation.
+Animation selection and stamping happen together, so a nested value-driven
+scope takes ownership even when its animation compares equal to an ancestor
+scope's animation.
 
 ## Proxy-Driven Scopes
 

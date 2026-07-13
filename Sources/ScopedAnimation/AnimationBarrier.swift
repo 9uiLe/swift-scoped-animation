@@ -19,7 +19,6 @@ extension View {
 struct AnimationBarrierModifier: ViewModifier {
   #if DEBUG
     let warnsOnLeaks: Bool
-    @State private var warningSite = AnimationScopeRuntimeWarning.Site("animationBarrier")
 
     init(warnsOnLeaks: Bool) {
       self.warnsOnLeaks = warnsOnLeaks
@@ -33,56 +32,12 @@ struct AnimationBarrierModifier: ViewModifier {
       #if DEBUG
         if warnsOnLeaks, transaction.animation != nil, transaction.animationScopeStamp == nil {
           AnimationScopeRuntimeWarning.report(
-            .barrierLeak(site: warningSite)
+            .barrierLeak(site: AnimationScopeRuntimeWarning.Site("animationBarrier"))
           )
         }
       #endif
 
       transaction.animation = nil
-    }
-  }
-}
-
-struct AnimationScopeBoundaryModifier: ViewModifier {
-  let stamp: AnimationScopeStamp
-  #if DEBUG
-    @State private var warningSite = AnimationScopeRuntimeWarning.Site("AnimationScopeBoundary")
-  #endif
-
-  func body(content: Content) -> some View {
-    content.transaction { transaction in
-      #if DEBUG
-        let incomingAnimation = transaction.animation
-      #endif
-      let incomingStamp = transaction.animationScopeStamp
-
-      #if DEBUG
-        if !transaction.disablesAnimations,
-          incomingAnimation != nil,
-          let incomingStamp,
-          incomingStamp.id != stamp.id,
-          incomingStamp.animation != nil
-        {
-          AnimationScopeRuntimeWarning.report(
-            .crossScopeAnimationStrip(
-              site: warningSite,
-              strippingScopeName: stamp.name,
-              strippedScopeName: incomingStamp.name
-            )
-          )
-        }
-      #endif
-
-      transaction.animation = nil
-
-      guard !transaction.disablesAnimations,
-        incomingStamp?.id == stamp.id,
-        let restoredAnimation = incomingStamp?.animation
-      else {
-        return
-      }
-
-      transaction.animation = restoredAnimation
     }
   }
 }

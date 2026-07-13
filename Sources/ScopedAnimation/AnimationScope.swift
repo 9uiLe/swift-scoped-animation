@@ -52,6 +52,13 @@ public struct AnimationScope<Content: View>: View {
   /// multiple trigger values change in the same transaction, the trigger
   /// closest to the start of the `triggers` array wins.
   ///
+  /// Keep the array's composition and order stable. Changing its count is a
+  /// structural update and does not animate. Reordering compares values by
+  /// their new positions, and those positions also define conflict priority.
+  /// An empty array creates a named boundary that strips incoming animations
+  /// without restoring one; prefer ``animationBarrier(warnsOnLeaks:)``
+  /// when a diagnostic boundary label is unnecessary.
+  ///
   /// ```swift
   /// AnimationScope(
   ///   name: "Board",
@@ -118,100 +125,70 @@ private struct AnimationScopeCoreModifier: ViewModifier {
   let scopeName: String?
   let stamp: AnimationScopeStamp
 
-  @ViewBuilder
   func body(content: Content) -> some View {
-    let stampedContent = content.transaction { transaction in
-      if let animation = transaction.animation {
-        let currentStamp = transaction.animationScopeStamp
-        if currentStamp == nil || currentStamp?.animation != animation {
-          transaction.animationScopeStamp = stamp.withAnimation(animation)
-        }
-      }
-    }
-
-    if triggers.isEmpty {
-      stampedContent
-        .modifier(AnimationScopeBoundaryModifier(stamp: stamp))
-    } else if triggers.count == 1 {
-      stampedContent
-        .animation(triggers[0].animation, value: triggers[0].value)
-        .modifier(AnimationScopeBoundaryModifier(stamp: stamp))
-    } else {
-      stampedContent
-        .modifier(
-          MultiTriggerValueAnimationModifier(
-            triggers: triggers,
-            scopeName: scopeName
-          )
+    content
+      .modifier(
+        ValueAnimationResolverModifier(
+          triggers: triggers,
+          scopeName: scopeName,
+          stamp: stamp
         )
-        .modifier(AnimationScopeBoundaryModifier(stamp: stamp))
-    }
+      )
+      .modifier(AnimationScopeBoundaryModifier(stamp: stamp))
   }
 }
 
-private struct MultiTriggerValueAnimationModifier: ViewModifier {
+private struct ValueAnimationResolverModifier: ViewModifier {
   let triggers: [AnimationTrigger]
   let scopeName: String?
+  let stamp: AnimationScopeStamp
 
-  #if DEBUG
-    @State private var warningSite = AnimationScopeRuntimeWarning.Site("MultiTriggerConflict")
-  #endif
+  @State private var history: AnimationTriggerHistory
 
-  @ViewBuilder
+  init(
+    triggers: [AnimationTrigger],
+    scopeName: String?,
+    stamp: AnimationScopeStamp
+  ) {
+    self.triggers = triggers
+    self.scopeName = scopeName
+    self.stamp = stamp
+    _history = State(
+      initialValue: AnimationTriggerHistory(
+        initialSnapshot: AnimationTriggerSnapshot(triggers: triggers)
+      )
+    )
+  }
+
   func body(content: Content) -> some View {
-    let animatedContent = triggers.reduce(AnyView(content)) { view, trigger in
-      AnyView(view.animation(trigger.animation, value: trigger.value))
-    }
+    let snapshot = AnimationTriggerSnapshot(triggers: triggers)
+    let resolution = history.resolve(current: snapshot, triggers: triggers)
 
-    #if DEBUG
-      animatedContent
-        .onChange(of: TriggerValuesSnapshot(values: triggers.map(\.value))) {
-          oldSnapshot,
-          newSnapshot in
-          let changedIndices = triggers.indices.filter {
-            oldSnapshot.values[$0] != newSnapshot.values[$0]
-          }
-
-          if changedIndices.count > 1 {
-            let adoptedIndex = changedIndices[0]
-            let rejectedIndices = Array(changedIndices.dropFirst())
-            AnimationScopeRuntimeWarning.report(
-              .multiTriggerConflict(
-                site: warningSite,
-                scopeName: scopeName,
-                adoptedTriggerIndex: adoptedIndex,
-                adoptedAnimation: triggers[adoptedIndex].animation,
-                rejectedTriggerIndices: rejectedIndices,
-                rejectedAnimations: rejectedIndices.map { triggers[$0].animation }
-              )
-            )
-          }
-        }
-    #else
-      animatedContent
-    #endif
-  }
-}
-
-private struct TriggerValuesSnapshot: Equatable {
-  let values: [AnyEquatable]
-}
-
-struct AnyEquatable: Equatable {
-  private let value: Any
-  private let equals: (Any) -> Bool
-
-  init<Value: Equatable>(_ value: Value) {
-    self.value = value
-    self.equals = { other in
-      guard let otherValue = other as? Value else {
-        return false
+    content.transaction(value: snapshot) { transaction in
+      guard !transaction.disablesAnimations, let resolution else {
+        return
       }
-      return value == otherValue
-    }
-  }
 
-  static func == (lhs: AnyEquatable, rhs: AnyEquatable) -> Bool {
-    lhs.equals(rhs.value)
+      transaction.animation = resolution.adoptedAnimation
+      transaction.animationScopeStamp = stamp.withAnimation(resolution.adoptedAnimation)
+
+      #if DEBUG
+        if !resolution.rejectedTriggerIndices.isEmpty {
+          AnimationScopeRuntimeWarning.report(
+            .multiTriggerConflict(
+              site: AnimationScopeRuntimeWarning.Site(
+                "MultiTriggerConflict",
+                scopeName: scopeName
+              ),
+              scopeName: scopeName,
+              adoptedTriggerIndex: resolution.adoptedTriggerIndex,
+              adoptedAnimation: resolution.adoptedAnimation,
+              rejectedTriggerIndices: resolution.rejectedTriggerIndices,
+              rejectedAnimations: resolution.rejectedAnimations
+            )
+          )
+        }
+      #endif
+    }
   }
 }

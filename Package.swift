@@ -18,18 +18,10 @@ let package = Package(
     )
   ],
   targets: [
-    .target(
-      name: "ScopedAnimation",
-      swiftSettings: [
-        .swiftLanguageMode(.v6)
-      ]
-    ),
+    .target(name: "ScopedAnimation"),
     .testTarget(
       name: "ScopedAnimationTests",
-      dependencies: ["ScopedAnimation"],
-      swiftSettings: [
-        .swiftLanguageMode(.v6)
-      ]
+      dependencies: ["ScopedAnimation"]
     ),
   ],
   swiftLanguageModes: [.v6]

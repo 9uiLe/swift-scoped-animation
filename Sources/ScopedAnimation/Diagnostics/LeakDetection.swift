@@ -11,28 +11,26 @@ extension View {
   ///   .detectAnimationLeaks()
   /// ```
   public func detectAnimationLeaks() -> some View {
-    modifier(AnimationLeakDetectorModifier())
+    #if DEBUG
+      modifier(AnimationLeakDetectorModifier())
+    #else
+      self
+    #endif
   }
 }
 
 #if DEBUG
   private struct AnimationLeakDetectorModifier: ViewModifier {
-    @State private var warningSite = AnimationScopeRuntimeWarning.Site("detectAnimationLeaks")
-
     func body(content: Content) -> some View {
       content.transaction { transaction in
         if transaction.animation != nil, transaction.animationScopeStamp == nil {
           AnimationScopeRuntimeWarning.report(
-            .unscopedAnimation(site: warningSite)
+            .unscopedAnimation(
+              site: AnimationScopeRuntimeWarning.Site("detectAnimationLeaks")
+            )
           )
         }
       }
-    }
-  }
-#else
-  private struct AnimationLeakDetectorModifier: ViewModifier {
-    func body(content: Content) -> some View {
-      content
     }
   }
 #endif

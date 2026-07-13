@@ -20,6 +20,7 @@ struct AnimationScopeStamp: Hashable, Sendable {
     AnimationScopeStamp(id: id, name: name, animation: animation)
   }
 
+  // Do not compare name or animation: either payload can change without replacing the scope.
   static func == (lhs: AnimationScopeStamp, rhs: AnimationScopeStamp) -> Bool {
     lhs.id == rhs.id
   }

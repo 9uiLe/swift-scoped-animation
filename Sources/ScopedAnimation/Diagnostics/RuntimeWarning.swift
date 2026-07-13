@@ -11,32 +11,35 @@
 
   enum AnimationScopeRuntimeWarning {
     struct Site: Hashable, Sendable {
-      let id: String
-      let name: String
+      let kind: String
+      let scopeName: String?
 
-      init(_ name: String, id: String = UUID().uuidString) {
-        self.id = id
-        self.name = name
+      init(_ kind: String, scopeName: String? = nil) {
+        self.kind = kind
+        self.scopeName = scopeName.flatMap { $0.isEmpty ? nil : $0 }
+      }
+
+      var id: String {
+        guard let scopeName else {
+          return kind
+        }
+        return "\(kind)|\(scopeName)"
       }
     }
 
     private struct State {
-      var lastReportDates: [String: Date] = [:]
+      var debouncer = RuntimeWarningDebouncer()
       var sink: @Sendable (AnimationScopeWarning) -> Void = defaultSink
-      var debounceInterval: TimeInterval = 1
     }
 
     private static let lock = OSAllocatedUnfairLock(initialState: State())
 
     static func report(_ warning: AnimationScopeWarning, now: Date = Date()) {
       let sink: (@Sendable (AnimationScopeWarning) -> Void)? = lock.withLock { state in
-        if let lastReportDate = state.lastReportDates[warning.siteID],
-          now.timeIntervalSince(lastReportDate) < state.debounceInterval
-        {
+        guard state.debouncer.shouldReport(siteID: warning.siteID, now: now) else {
           return nil
         }
 
-        state.lastReportDates[warning.siteID] = now
         return state.sink
       }
 
@@ -45,12 +48,19 @@
 
     static func withTestSink<R>(
       debounceInterval: TimeInterval = 1,
+      maximumSiteCount: Int = 64,
       _ sink: @escaping @Sendable (AnimationScopeWarning) -> Void,
       operation: () throws -> R
     ) rethrows -> R {
       let previous = lock.withLock { state in
         let previous = state
-        state = State(sink: sink, debounceInterval: debounceInterval)
+        state = State(
+          debouncer: RuntimeWarningDebouncer(
+            interval: debounceInterval,
+            maximumEntryCount: maximumSiteCount
+          ),
+          sink: sink
+        )
         return previous
       }
 
@@ -80,6 +90,46 @@
     }
   }
 
+  struct RuntimeWarningDebouncer {
+    let interval: TimeInterval
+    let maximumEntryCount: Int
+    private(set) var lastReportDates: [String: Date] = [:]
+
+    init(interval: TimeInterval = 1, maximumEntryCount: Int = 64) {
+      self.interval = max(interval, 0)
+      self.maximumEntryCount = max(maximumEntryCount, 1)
+    }
+
+    var entryCount: Int {
+      lastReportDates.count
+    }
+
+    mutating func shouldReport(siteID: String, now: Date) -> Bool {
+      lastReportDates = lastReportDates.filter { _, lastReportDate in
+        let age = now.timeIntervalSince(lastReportDate)
+        return age >= 0 && age < interval
+      }
+
+      if lastReportDates[siteID] != nil {
+        return false
+      }
+
+      if lastReportDates.count >= maximumEntryCount,
+        let oldest = lastReportDates.min(by: { lhs, rhs in
+          if lhs.value == rhs.value {
+            return lhs.key < rhs.key
+          }
+          return lhs.value < rhs.value
+        })
+      {
+        lastReportDates.removeValue(forKey: oldest.key)
+      }
+
+      lastReportDates[siteID] = now
+      return true
+    }
+  }
+
   extension AnimationScopeWarning {
     static func unscopedAnimation(site: AnimationScopeRuntimeWarning.Site) -> Self {
       AnimationScopeWarning(
@@ -87,7 +137,7 @@
         title: "Unscoped animation transaction",
         message:
           "ScopedAnimation detected an animation transaction without an AnimationScope stamp at "
-          + "\(site.name). Move the animation into AnimationScope or add animationBarrier() "
+          + "\(site.kind). Move the animation into AnimationScope or add animationBarrier() "
           + "near the leaking subtree."
       )
     }

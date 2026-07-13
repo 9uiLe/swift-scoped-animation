@@ -34,19 +34,24 @@ extension View {
     let id: UUID
     let name: String?
     let anchor: Anchor<CGRect>
+    let color: Color
 
-    var label: String {
-      name ?? "AnimationScope"
-    }
+    init(id: UUID, name: String?, anchor: Anchor<CGRect>) {
+      self.id = id
+      self.name = name
+      self.anchor = anchor
 
-    var color: Color {
       var uuid = id.uuid
       let hue = withUnsafeBytes(of: &uuid) { bytes in
         bytes.enumerated().reduce(0) { partial, next in
           (partial + Int(next.element) * (next.offset + 1)) % 360
         }
       }
-      return Color(hue: Double(hue) / 360, saturation: 0.82, brightness: 0.94)
+      self.color = Color(hue: Double(hue) / 360, saturation: 0.82, brightness: 0.94)
+    }
+
+    var label: String {
+      name ?? "AnimationScope"
     }
   }
 
