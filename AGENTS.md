@@ -19,6 +19,24 @@ scope, API design, and roadmap. Read it before writing any code.**
 - All user-facing text (README, DocC, doc comments, error messages) in English.
   Commit messages in English, imperative mood.
 
+## Put information where it will live longest
+
+- **Code owns How.** Express how the implementation works through names,
+  types, and control flow. Do not add comments that merely narrate the code;
+  rename or restructure the code instead.
+- **Tests own What.** Treat tests as executable specifications. Test names,
+  setup, and assertions must state the behavior the product promises.
+- **Commit history owns Why.** Commit messages must preserve the motivation and
+  context that made the change necessary, not just summarize the diff.
+- **Implementation comments own Why Not.** Add a code comment only when a
+  non-obvious constraint rules out the simpler implementation, or when a
+  considered alternative was rejected for a reason the code cannot express.
+  State that constraint or rejected alternative directly.
+
+Required DocC comments are user-facing API documentation, not implementation
+commentary: they describe the public contract and usage. Durable product and API
+decisions continue to belong in `HANDOFF.md`.
+
 ## Toolchain & targets
 
 - Xcode 26.x / Swift 6.3, Swift 6 language mode, strict concurrency = complete.
@@ -76,3 +94,6 @@ before pinning — do not guess.
 2. New public API documented in DocC and exercised in the example app.
 3. `CHANGELOG.md` updated under `Unreleased`.
 4. No TODO/FIXME left without a linked issue reference.
+5. When adding or renaming DEBUG diagnostics, update the positive-control marker
+   list in `scripts/verify-release-diagnostics.sh` so the RELEASE symbol audit
+   covers the new diagnostic.
