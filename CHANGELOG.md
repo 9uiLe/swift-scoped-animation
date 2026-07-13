@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- Select CI simulators by UDID from `simctl` JSON so device names containing
+  parentheses cannot be truncated into invalid destinations.
+- Preserve scoped content identity when a multi-trigger array changes between
+  one, two, or more entries, and avoid the previous DEBUG out-of-bounds failure
+  on trigger-count changes.
+- Resolve simultaneous trigger changes explicitly by array position and use the
+  same result for animation, stamping, and conflict diagnostics.
+- Attribute nested value-driven updates to the inner scope even when its
+  animation is equal to the ancestor animation.
+
+### Changed
+
+- Make `detectAnimationLeaks()` a structural no-op in RELEASE builds and audit
+  release objects for diagnostic symbols and strings in CI.
+- Bound DEBUG warning debounce storage, expire stale entries, and use stable
+  warning-kind plus scope-name keys across view remounts.
+- Derive each DEBUG overlay boundary color once per preference value instead of
+  repeating the UUID reduction during overlay rendering.
+- Remove per-transaction observable updates and actor tasks from List QA rows;
+  publish only begin and finish snapshots to the status UI, and isolate the
+  list behind narrow value inputs.
+- Record the How / What / Why / Why Not information-placement policy in the
+  repository agent instructions.
+
+### Documentation
+
+- Document empty, reordered, and dynamically resized trigger arrays and the
+  single-resolver implementation model.
+- Clarify the correct Instruments template for physical devices, the host Mac,
+  and the iOS Simulator.
+
 ## 0.2.0 - 2026-07-05
 
 - Add multi-trigger `AnimationScope(name:triggers:)` with declaration-order conflict resolution and DEBUG `multiTriggerConflict` warnings.
