@@ -15,6 +15,7 @@ Spike code: `spike/` SwiftPM package, intentionally ignored by git
 | S4 | Conditional | A root `.transaction {}` hook can observe global `withAnimation` leaks at practical call counts, but it is blind to descendant `.animation(_:value:)` transactions created below the root observer. |
 | S5 | Conditional | `.transition` and `matchedGeometryEffect` work inside a barrier when a local value animation is reapplied. `LazyVStack` rows and `List` container updates did not receive animation through the barrier. `List` row hooks were not invoked in this unit-hosting harness, so List cell reuse needs Phase 1 sample/manual QA coverage. |
 | S6 | Works | Anchor preference overlay frames update during scroll and resize. |
+| S8 | Works | `.transaction(value:)` transforms the transaction for its tracked value change and does not add animation to an unrelated state update. This gates the structurally stable multi-trigger resolver. |
 
 ## Go / No-Go
 
@@ -268,6 +269,32 @@ Observed behavior:
 - After resizing to a landscape-sized host: `x=16.0 y=146.0 width=812.0 height=44.0`.
 
 The overlay follows scroll position and host-size changes.
+
+## S8: Value-Gated Transaction Resolver
+
+Verdict: Works.
+
+The library test `testS8ValueTransactionHookOnlyAnimatesItsTrackedValue` hosts a
+view with one tracked value and one unrelated value. Both affect the same child,
+but only the tracked value is passed to `.transaction(value:)`.
+
+Command:
+
+```sh
+swift test --filter testS8ValueTransactionHookOnlyAnimatesItsTrackedValue
+```
+
+Observed output on 2026-07-14 with the repository toolchain:
+
+```text
+S8_VALUE_TRANSACTION_UNRELATED: ... animation=false ...
+S8_VALUE_TRANSACTION_TRACKED: ... animation=true ...
+Executed 1 test, with 0 failures (0 unexpected)
+```
+
+Implication: one stable resolver modifier can gate animation by the complete
+trigger snapshot, while resolving the changed array positions explicitly rather
+than stacking `.animation(_:value:)` modifiers.
 
 ## Required HANDOFF.md Updates Before Phase 1
 

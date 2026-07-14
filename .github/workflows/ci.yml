@@ -12,6 +12,7 @@ on:
       - "Sources/**"
       - "Tests/**"
       - "Examples/**"
+      - "scripts/**"
       - "Package.swift"
       - ".swift-format"
       - ".github/workflows/ci.yml"
@@ -59,14 +60,53 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          name="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {gsub(/^ +| +$/, "", $1); selected=$1} END {print selected}')"
-          if [[ -z "${name}" ]]; then
+          devices_json="${RUNNER_TEMP}/available-simulators.json"
+          xcrun simctl list devices available --json > "${devices_json}"
+          selection="$(
+            python3 - "${devices_json}" <<'PY'
+          import json
+          import re
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as source:
+              runtimes = json.load(source)["devices"]
+
+          iphones = []
+          for runtime_identifier, devices in runtimes.items():
+              version_match = re.search(r"\.iOS-(\d+)-(\d+)(?:-(\d+))?$", runtime_identifier)
+              if version_match is None:
+                  continue
+
+              version = tuple(int(component or 0) for component in version_match.groups())
+              for position, device in enumerate(devices):
+                  if not device.get("isAvailable", True) or not device["name"].startswith("iPhone"):
+                      continue
+
+                  model_match = re.fullmatch(r"iPhone (\d+)", device["name"])
+                  generation = int(model_match.group(1)) if model_match is not None else None
+                  iphones.append((version, -position, generation, device))
+
+          if not iphones:
+              raise SystemExit("No available iPhone simulator found")
+
+          latest_runtime = max(candidate[0] for candidate in iphones)
+          latest_iphones = [candidate for candidate in iphones if candidate[0] == latest_runtime]
+          base_models = [candidate for candidate in latest_iphones if candidate[2] is not None]
+          if base_models:
+              selected = max(base_models, key=lambda candidate: (candidate[2], candidate[1]))[3]
+          else:
+              selected = max(latest_iphones, key=lambda candidate: candidate[1])[3]
+          print(f"{selected['udid']}\t{selected['name']}")
+          PY
+          )"
+          IFS=$'\t' read -r udid name <<< "${selection}"
+          if [[ -z "${udid}" || -z "${name}" ]]; then
             echo "No available iPhone simulator found" >&2
             xcrun simctl list devices available
             exit 1
           fi
-          echo "name=${name}" >> "${GITHUB_OUTPUT}"
-          echo "Using simulator: ${name}"
+          echo "udid=${udid}" >> "${GITHUB_OUTPUT}"
+          echo "Using simulator: ${name} (${udid})"
 
       - name: Swift format
         run: |
@@ -88,12 +128,18 @@ jobs:
         run: |
           xcodebuild test \
             -scheme ScopedAnimation \
-            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}" \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath DerivedData \
             COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Build package in release
         run: swift build -c release
+
+      - name: Test package in release
+        run: swift test -c release
+
+      - name: Verify diagnostics compile out in release
+        run: bash scripts/verify-release-diagnostics.sh
 
       - name: Build DocC documentation
         run: xcodebuild docbuild -scheme ScopedAnimation -destination 'generic/platform=iOS' -derivedDataPath DerivedData COMPILER_INDEX_STORE_ENABLE=NO
@@ -103,6 +149,6 @@ jobs:
           xcodebuild build \
             -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj \
             -scheme ScopedAnimationExample \
-            -destination "platform=iOS Simulator,name=${{ steps.simulator.outputs.name }}" \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath DerivedData \
             COMPILER_INDEX_STORE_ENABLE=NO

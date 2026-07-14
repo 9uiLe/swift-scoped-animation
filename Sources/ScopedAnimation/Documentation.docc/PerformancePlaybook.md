@@ -41,10 +41,18 @@ These are not forbidden. They just deserve measurement when used in repeated row
 
 ## Measure With Instruments
 
-Use the SwiftUI instruments template when an animation feels slow.
+Use Instruments when an animation feels slow. Pick the template for the target
+you are measuring:
 
-1. Run the sample or your app on a simulator or device.
-2. Open Instruments and choose a SwiftUI-focused template.
+- On a physical iPhone or iPad, or when profiling a macOS app on the host Mac,
+  use the SwiftUI template so the SwiftUI instrument lane is populated.
+- On the iOS Simulator, use Time Profiler. The simulator does not populate the
+  SwiftUI lane, and its host-driven rendering is not representative of device
+  performance. Use it for functional checks and CPU, hang, or hitch clues, not
+  final rendering sign-off.
+
+1. Run the sample or your app on the chosen target.
+2. Open Instruments and select the template above.
 3. Trigger the animation repeatedly.
 4. Compare the animated subtree before and after moving a scope or barrier.
 

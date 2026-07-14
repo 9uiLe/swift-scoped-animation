@@ -15,35 +15,35 @@ import SwiftUI
 /// }
 /// ```
 public struct AnimationScopeProxy {
-  private let animation: Animation
-  private let stamp: AnimationScopeStamp
+    private let animation: Animation
+    private let stamp: AnimationScopeStamp
 
-  init(animation: Animation, stamp: AnimationScopeStamp) {
-    self.animation = animation
-    self.stamp = stamp
-  }
+    init(animation: Animation, stamp: AnimationScopeStamp) {
+        self.animation = animation
+        self.stamp = stamp
+    }
 
-  /// Runs `body` with the scope's default animation.
-  ///
-  /// ```swift
-  /// scope.animate {
-  ///     isExpanded.toggle()
-  /// }
-  /// ```
-  public func animate(_ body: () -> Void) {
-    animate(animation, body)
-  }
+    /// Runs `body` with the scope's default animation.
+    ///
+    /// ```swift
+    /// scope.animate {
+    ///     isExpanded.toggle()
+    /// }
+    /// ```
+    public func animate(_ body: () -> Void) {
+        animate(animation, body)
+    }
 
-  /// Runs `body` with a one-off animation for this trigger.
-  ///
-  /// ```swift
-  /// scope.animate(.spring(duration: 0.4)) {
-  ///     selection = nextSelection
-  /// }
-  /// ```
-  public func animate(_ animation: Animation, _ body: () -> Void) {
-    var transaction = Transaction(animation: animation)
-    transaction.animationScopeStamp = stamp.withAnimation(animation)
-    withTransaction(transaction, body)
-  }
+    /// Runs `body` with a one-off animation for this trigger.
+    ///
+    /// ```swift
+    /// scope.animate(.spring(duration: 0.4)) {
+    ///     selection = nextSelection
+    /// }
+    /// ```
+    public func animate(_ animation: Animation, _ body: () -> Void) {
+        var transaction = Transaction(animation: animation)
+        transaction.animationScopeStamp = stamp.withAnimation(animation)
+        withTransaction(transaction, body)
+    }
 }
