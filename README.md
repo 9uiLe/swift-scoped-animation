@@ -43,7 +43,7 @@ https://github.com/9uiLe/swift-scoped-animation.git
 Or add it to `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/9uiLe/swift-scoped-animation.git", from: "0.2.0")
+.package(url: "https://github.com/9uiLe/swift-scoped-animation.git", from: "0.2.1")
 ```
 
 Then add `ScopedAnimation` to the target dependencies.
