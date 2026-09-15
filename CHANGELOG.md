@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Prepare releases through a versioned-document PR and publish with local owner
+  authentication only after the exact master commit passes package and
+  release-tooling CI.
+- Publish annotated `vX.Y.Z` tags and immutable, source-only GitHub Releases
+  with validated recovery from interrupted publication.
+- Run CI for every master push, including release-document changes, and disable
+  persisted checkout credentials.
 - Document the complete product contract, architecture, performance model, and
   validation procedure for new contributors.
 - Resolve trigger history with one comparison pass and defer DEBUG warning

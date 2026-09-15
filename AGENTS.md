@@ -49,6 +49,7 @@ decisions continue to belong in `HANDOFF.md`.
 ```sh
 swift build
 swift test                          # macOS host tests
+python3 -m unittest discover -s scripts/tests -v  # release tooling
 # iOS simulator (required for core semantic changes):
 xcodebuild test -scheme ScopedAnimation \
   -destination 'platform=iOS Simulator,name=iPhone 17' | tail -50
@@ -88,6 +89,15 @@ build + test (macOS and iOS Simulator), `swift format lint --strict`, DocC build
 (`xcodebuild docbuild`), RELEASE build and tests, diagnostic symbol audit, and
 example app build. Verify the runner image and Xcode version actually available
 on GitHub-hosted runners before pinning — do not guess.
+
+## Release tooling
+
+- `docs/releasing.md` defines the local owner-authenticated release commands.
+- Use Python standard-library `unittest` for `scripts/release.py`, with temporary
+  Git repositories and simulated GitHub responses. Tests must not publish tags
+  or Releases.
+- CI remains read-only. Publication requires successful master push CI for the
+  exact source commit, including package and release-tooling jobs.
 
 ## Definition of done (per PR)
 

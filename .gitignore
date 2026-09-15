@@ -16,3 +16,7 @@ spike/
 
 # Local agent/tool caches
 .tokensave/
+
+# Release tooling
+__pycache__/
+*.pyc

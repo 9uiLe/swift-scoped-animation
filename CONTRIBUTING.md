@@ -31,12 +31,16 @@ The [design](HANDOFF.md) defines each component's responsibility. The
 - Zero external dependencies
 - Swift 6 language mode
 - Strict concurrency enabled
+- Python 3.10+ for release-tooling tests (standard library only)
 
 ## Local Checks
 
 Run these before opening a pull request:
 
 ```sh
+python3 -m unittest discover -s scripts/tests -v
+bash -n scripts/release.sh
+
 swift format lint --strict --configuration .swift-format \
   Package.swift \
   Benchmarks/*.swift \
@@ -95,4 +99,23 @@ Do not infer frame-rate or allocation improvements from internal CPU timings.
 
 ## Releasing
 
-Run `scripts/release.sh <version>` (for example `scripts/release.sh 0.2.0`). The script verifies the pre-flight state and CI status, runs the local checks, rolls the `## Unreleased` changelog section over to the new version, updates the README version, then commits, tags, pushes, and creates the GitHub release. Run it with `--dry-run` first to preview the release without making any changes.
+The owner uses local `scripts/release.py` commands to prepare a release PR,
+verify the merged source commit, and publish its annotated tag and GitHub
+Release. GitHub Actions validates commits with read-only permissions.
+
+```sh
+./scripts/release.py prepare X.Y.Z --dry-run
+./scripts/release.py prepare X.Y.Z
+# Merge the release PR and wait for master push CI.
+./scripts/release.py check X.Y.Z
+./scripts/release.py publish X.Y.Z
+```
+
+Replace `X.Y.Z` with the chosen stable version. Tags use `vX.Y.Z`.
+Publication requires both `build-test-docs` and `Release tooling checks` for
+the exact source SHA, consistent README/CHANGELOG versions, and Immutable
+releases enabled on GitHub.
+
+See [the release guide](docs/releasing.md) for authentication, repository
+protection, command behavior, and recovery. `scripts/release.sh` forwards the
+same subcommands to Python.
