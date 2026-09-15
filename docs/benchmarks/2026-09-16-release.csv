@@ -1,0 +1,14 @@
+configuration,case,iterations,min_ns_per_operation,median_ns_per_operation,max_ns_per_operation,checksum
+RELEASE (-O),history/count=1/changed=-1,20000,87.9,89.0,90.9,0
+RELEASE (-O),history/count=1/changed=0,20000,233.5,257.3,294.9,140100
+RELEASE (-O),history/count=2/changed=-1,20000,161.6,169.8,184.1,0
+RELEASE (-O),history/count=2/changed=0,20000,222.3,226.2,230.1,140100
+RELEASE (-O),history/count=2/changed=1,20000,301.2,308.3,311.8,280200
+RELEASE (-O),history/count=8/changed=-1,20000,571.6,585.0,589.3,0
+RELEASE (-O),history/count=8/changed=0,20000,221.8,225.1,230.7,140100
+RELEASE (-O),history/count=8/changed=7,20000,701.3,710.6,724.9,1120800
+RELEASE (-O),history/count=64/changed=-1,20000,4535.1,4560.2,4594.7,0
+RELEASE (-O),history/count=64/changed=0,20000,219.5,223.5,228.2,140100
+RELEASE (-O),history/count=64/changed=63,20000,4668.1,4712.4,4792.5,8966400
+RELEASE (-O),history/8x1024-element-arrays/changed=7,2000,86139.4,86735.2,88656.1,112800
+RELEASE (-O),construct-and-compare/two-8-trigger-snapshots,20000,4302.5,4329.1,4915.8,140100

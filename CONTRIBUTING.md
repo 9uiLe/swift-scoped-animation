@@ -1,14 +1,32 @@
 # Contributing
 
-Thanks for working on ScopedAnimation.
+Read the product contract, locate the behavior you are changing, and validate it
+on the supported hosting environments.
 
 ## Source of Truth
 
 `HANDOFF.md` is the design source of truth. Do not change public API, semantics, or roadmap phase order without updating the design and explaining the reason in the pull request.
 
+## Repository Map
+
+| Path | Responsibility |
+| --- | --- |
+| `Sources/ScopedAnimation/` | Scope composition, trigger resolution, boundaries, proxies, and stamps |
+| `Sources/ScopedAnimation/Diagnostics/` | DEBUG warnings, leak detection, and overlays |
+| `Sources/ScopedAnimation/Documentation.docc/` | Public API guides |
+| `Tests/ScopedAnimationTests/` | Behavioral and pure contract tests |
+| `Tests/ScopedAnimationTests/Support/` | Hosting, transaction recording, and test fixtures |
+| `Examples/ScopedAnimationExample/` | Interactive iOS sample |
+| `Examples/QA.md` | Manual QA procedure and environment-specific results |
+| `Benchmarks/` | Internal CPU measurement fixtures and method |
+| `docs/` | Compatibility assumptions, reference measurements, and validation evidence |
+
+The [design](HANDOFF.md) defines each component's responsibility. The
+[validation record](docs/validation.md) lists measured coverage and limitations.
+
 ## Requirements
 
-- Xcode 26.x / Swift 6
+- Xcode 26.x / Swift 6.3
 - SwiftPM only
 - Zero external dependencies
 - Swift 6 language mode
@@ -19,8 +37,9 @@ Thanks for working on ScopedAnimation.
 Run these before opening a pull request:
 
 ```sh
-swift format lint --configuration .swift-format \
+swift format lint --strict --configuration .swift-format \
   Package.swift \
+  Benchmarks/*.swift \
   Sources/ScopedAnimation/*.swift \
   Sources/ScopedAnimation/Diagnostics/*.swift \
   Tests/ScopedAnimationTests/*.swift \
@@ -31,6 +50,8 @@ swift build
 swift test
 xcodebuild test -scheme ScopedAnimation -destination 'platform=iOS Simulator,name=iPhone 17'
 swift build -c release
+swift test -c release
+bash scripts/verify-release-diagnostics.sh
 xcodebuild docbuild -scheme ScopedAnimation -destination 'generic/platform=iOS'
 xcodebuild build \
   -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj \
@@ -50,7 +71,27 @@ Diagnostics code paths must be guarded with `#if DEBUG`. When checking that code
 
 ## Tests
 
-Behavioral transaction tests live in `Tests/ScopedAnimationTests/Support/`. Prefer spy-based tests for transaction semantics.
+Behavioral tests are grouped by contract in `Tests/ScopedAnimationTests/`; their
+hosting views, models, and transaction spy live in `Support/`.
+
+Use Swift Testing. Add hosting and warning-capture tests under the serialized
+`AnimationScopeBehaviorTests` suite so run-loop updates and the global warning
+sink cannot overlap. Retain each host and close it with `defer`.
+
+A negative animation assertion must first observe a transaction. The recorder
+reports an issue for empty observations, and compares `Animation` values directly.
+When asserting ownership, check the animation and stamp on the same recorded
+transaction.
+Keep pure tests independent of SwiftUI hosting when they exercise selection or
+bounded debounce behavior.
+
+## Performance Measurements
+
+Run `bash scripts/benchmark-performance.sh release` and
+`bash scripts/benchmark-performance.sh debug` sequentially with no concurrent
+builds or simulator work. Follow [Benchmarks/README.md](Benchmarks/README.md).
+Record compiler flags, environment, operation definitions, and raw timings.
+Do not infer frame-rate or allocation improvements from internal CPU timings.
 
 ## Releasing
 

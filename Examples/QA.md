@@ -1,74 +1,63 @@
-# ScopedAnimation Example QA
+# Example app QA
 
-Manual QA is performed on the iOS simulator unless noted otherwise.
+Use the iOS sample to inspect behavior that hosted transaction tests cannot
+establish: rendered motion, List row propagation and reuse, overlay placement,
+and interactive controls.
 
-## Environment
+## Run the app
 
-- Date: 2026-07-14
-- Device: iPhone 17 Simulator (`5A6604DB-0328-4DFD-89EF-6A5EEE0CE974`)
-- OS: iOS 26.5
-- App: `Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj`
-- Build:
-  `xcodebuild build -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj -scheme ScopedAnimationExample -destination 'platform=iOS Simulator,id=5A6604DB-0328-4DFD-89EF-6A5EEE0CE974'`
+Build `Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj` with the
+`ScopedAnimationExample` scheme and an available iPhone simulator. Use a DEBUG
+build to inspect runtime warnings and outlines.
 
-## Checklist
+Record the date, source revision, Xcode version, device, runtime, steps, and
+observed result for every QA run. Recheck on major OS or Xcode changes.
 
-| Area | Steps | Expected Result | Result |
-| --- | --- | --- | --- |
-| Before / After | Open Compare, tap `Raw update`, then tap `Scoped update`. | The raw panel animates unrelated status UI; the scoped panel animates the card while adjacent status UI updates without visible animation. | Pass |
-| Overlay | Open Overlay, tap `Scoped`, then tap `Raw`. | Scope outlines and labels are visible; raw animation exercises the leak detector placement in DEBUG. | Pass |
-| List scope propagation | Open List QA, select `Scope`, tap `Run selected`. | Row content receives scoped animation when `AnimationScope` wraps `List`. | Pass |
-| List barrier | Open List QA, select `Barrier`, tap `Run selected`. | Row content does not receive animation from the raw parent transaction. | Pass |
-| List reuse | Open List QA, select `Reuse`, tap `Run selected`; scroll offscreen and back before the second pulse. | Rows that leave and re-enter the viewport still receive scoped animation. | Pass |
-| Multi-Trigger selection | Open Multi-Trigger, tap cells on the board. | Selected cells animate with the fast easeOut highlight (background and scale). | |
-| Multi-Trigger hints | Tap `Show hints`. | Hint cells animate with the spring (border, symbol, offset/scale); selection state is unchanged. | |
-| Multi-Trigger conflict | Tap `Select + hint together`. | Both sets change in one update; motion follows easeOut (first trigger), not spring. | |
-| Multi-Trigger DEBUG warning | Run the conflict step in a DEBUG build; watch the Xcode console. | A `multiTriggerConflict` runtime warning is logged. | |
-| Multi-Trigger reset | Tap `Reset`. | Both selection and hints clear without stale visual state. | |
+## Procedure
 
-## M3 List QA Result
-
-Revalidated on 2026-07-14 after replacing per-row observable updates with
-lock-protected transaction counters and begin/finish status snapshots.
-
-Command sequence:
-
-```sh
-simulator_udid=5A6604DB-0328-4DFD-89EF-6A5EEE0CE974
-
-xcodebuild build -quiet \
-  -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj \
-  -scheme ScopedAnimationExample \
-  -destination "platform=iOS Simulator,id=${simulator_udid}" \
-  -derivedDataPath .build/ScopedAnimationExampleDerivedData
-
-xcrun simctl install "${simulator_udid}" \
-  .build/ScopedAnimationExampleDerivedData/Build/Products/Debug-iphonesimulator/ScopedAnimationExample.app
-
-xcrun simctl launch "${simulator_udid}" dev.scopedanimation.example --screen=list-qa --auto-list-qa
-xcrun simctl io "${simulator_udid}" screenshot .build/list-qa-auto.png
-```
-
-Observed screen state after the automatic List QA run:
-
-| Check | Observed State | Result |
+| Area | Steps | Expected result |
 | --- | --- | --- |
-| `AnimationScope` wrapping `List` | `Scope` displayed `Pass`, with `6/6` animated/observed row transactions. | Pass |
-| `animationBarrier()` in rows | `Barrier` displayed `Pass`, with `0/6` animated/observed row transactions. | Pass |
-| Cell reuse after scroll away/back | `Reuse` displayed `Pass`, with `7/7` animated/observed row transactions after the return pulse. | Pass |
+| Compare | Tap `Raw update`, then `Scoped update`. | The raw panel animates unrelated status UI. The scoped panel animates its card while adjacent status UI updates without that animation. |
+| Overlay | Tap `Scoped`, then `Raw`. Scroll or resize as applicable. | Named outlines follow the scope bounds. The raw action exercises the detector. Outlines do not intercept interaction or accessibility navigation. |
+| List scope propagation | Select `Scope` and tap `Run selected`. | Visible row transactions carry scoped animation; the status reports animated and observed counts. |
+| List barrier | Select `Barrier` and run it. | Rows are observed but carry no raw incoming animation. Zero observed rows are not a passing result. |
+| List reuse | Select `Reuse`, run it, and scroll rows out of view and back before the return pulse. | Reappearing rows receive scoped animation. |
+| List run controls | Start a run and inspect the controls; leave the screen during a run and return. | Conflicting runs are disabled. Leaving cancels pending work without publishing partial success. |
+| Multi-Trigger selection | Tap board cells. | Selection animates with the first trigger's ease-out animation. |
+| Multi-Trigger hints | Tap `Show hints`. | Hints animate with the spring while selection remains unchanged. |
+| Multi-Trigger conflict | Tap `Select + hint together`. | The first trigger wins for the update and DEBUG reports `multiTriggerConflict`. |
+| Multi-Trigger reset | Tap `Reset`. | Both sets clear without stale visual state. |
 
-Conclusion: `List` row content received scoped transactions, `animationBarrier()` stripped raw incoming animation inside rows, and scoped behavior survived row reuse in this simulator run.
+## Recorded observations: 2026-07-14
 
-## M4 Remaining QA Result
+Environment: iPhone 17 Simulator, iOS 26.5,
+UDID `5A6604DB-0328-4DFD-89EF-6A5EEE0CE974`.
+The source revision was not recorded. These observations do not certify every
+subsequent source state.
 
-Before / After:
+| Check | Recorded observation | Result |
+| --- | --- | --- |
+| Compare | Raw status UI visibly animated; the scoped card animated while adjacent status UI updated without visible animation. | Pass |
+| Overlay | The outline and `Outer` label rendered; the raw probe exercised the detector placement. | Pass |
+| List scope | `Scope` displayed `Pass`, with 6/6 animated/observed row transactions. | Pass |
+| List barrier | `Barrier` displayed `Pass`, with 0/6 animated/observed row transactions. | Pass |
+| List reuse | `Reuse` displayed `Pass`, with 7/7 animated/observed row transactions after the return pulse. | Pass |
+| List run controls | No manual result recorded. | Unverified |
+| Multi-Trigger interactions | No manual result recorded. | Unverified |
 
-- Method: launched the example app on the Compare tab, used accessibility to press `Raw update`, then pressed `Scoped update`.
-- Screenshot: `.build/before-after-qa.png`
-- Result: Pass. The raw panel's status UI visibly participated in the raw animation. The scoped panel's card changed through `AnimationScopeProxy`, while the adjacent status UI updated without visible animation from the scoped transaction.
+The List run used `--screen=list-qa --auto-list-qa`. The overlay run used
+`--screen=overlay --auto-overlay-qa`. Compare buttons were activated through
+accessibility controls.
 
-Overlay:
+Local screenshot paths recorded for that run were `.build/list-qa-auto.png`,
+`.build/before-after-qa.png`, and `.build/overlay-qa.png`. These are local build
+artifacts, not distributed evidence files.
 
-- Method: launched the Overlay tab with `--screen=overlay --auto-overlay-qa`; the view ran the same `scope.animate` path as the `Scoped` button and the same raw `withAnimation` path as the `Raw` button.
-- Screenshot: `.build/overlay-qa.png`
-- Result: Pass. The overlay rendered the scope outline and `Outer` label. The raw probe changed after the raw animation path, exercising the DEBUG leak detector placement on the demo screen.
+## Coverage limits
+
+- Unit-hosted List row hooks may not execute; use the sample's row counters.
+- Animated transaction counts do not prove smooth rendering.
+- A successful example build does not count as manual QA.
+- Physical-device behavior requires a recorded run on the relevant device.
+
+Automated test and build output is recorded in [validation](../docs/validation.md).

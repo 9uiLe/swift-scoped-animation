@@ -1,144 +1,150 @@
 # How It Works
 
-ScopedAnimation uses SwiftUI transactions as the runtime boundary mechanism.
+Follow a transaction from its animation source through scope boundaries.
 
-## Transaction Model
+## Transactions and Stamps
 
-SwiftUI carries animation information through a `Transaction`. ScopedAnimation adds an internal transaction stamp with two pieces of data:
+SwiftUI carries animation information in a `Transaction`. ScopedAnimation adds
+an internal stamp containing a stable scope ID, an optional display name, and the
+animation selected for that transaction.
 
-- the `AnimationScope` identifier, and
-- the actual `Animation` used for that transaction.
+The ID determines ownership. A name helps diagnostics identify the scope, and an
+animation payload lets a matching boundary restore the intended animation.
+Changing the name or payload does not replace the scope's identity.
 
-Every scope boundary uses a strip-then-restore rule:
+## Boundary Processing
 
-1. Strip `transaction.animation` from every incoming transaction.
-2. Read the internal stamp.
-3. Restore the stamped animation only when the stamp belongs to that exact scope.
-4. Do not restore when `transaction.disablesAnimations == true`.
+Every scope boundary:
 
-This means ancestor animations do not flow into the scope. Proxy-driven animations are restored only inside the scope that created them. Nested scopes work because an outer stamped transaction is stripped at the inner boundary and is not restored there.
+1. removes `transaction.animation`;
+2. preserves the stamp for descendants; and
+3. restores the stamp's animation only when its ID matches this scope and
+   `transaction.disablesAnimations` is false.
 
-## Nested Scope Semantics
+A standalone `animationBarrier()` performs the first two steps and never restores
+animation. Both use the same boundary implementation.
 
-Nested `AnimationScope` values do not compose multiple animations over the same
-subtree. The descendant boundary wins because it strips every incoming animation
-and restores only a stamp with its own scope identifier.
+```text
+Incoming transaction
+    ↓
+Boundary: strip, preserve stamp, restore matching animation when enabled
+    ↓
+Value resolver: supply local animation and stamp when a trigger changes
+    ↓
+Content and any descendant boundaries
+```
 
-That includes value-driven scopes. If an outer value-driven scope stamps a
-transaction, an inner scope boundary treats that stamp as belonging to another
-scope and leaves `transaction.animation` as `nil`. The stamp is still present,
-but the animation effect is intentionally blocked at the descendant boundary.
+The boundary is outside the value resolver in the modifier chain, so incoming
+animation is processed before a local value change supplies its animation.
 
-In DEBUG builds, ScopedAnimation reports this as `crossScopeAnimationStrip` when
-the stripped transaction carried another scope's stamped animation. The warning
-is not a leak warning; it is a composition warning. Use sibling scopes for
-separate visual layers, `AnimationScope(name:triggers:)` when one subtree needs
-multiple triggers, or move the animation owner closer to the affected subtree.
+## Value-Driven Animation
 
-## Multi-Trigger Scopes
-
-When several `(animation, value)` pairs affect the same subtree, declare them in
-one scope instead of nesting:
+A value-driven scope pairs each observed value with an animation:
 
 ```swift
 AnimationScope(
-  name: "Board",
-  triggers: [
-    .animation(.easeOut(duration: 0.12), value: selectedPoints),
-    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintPoints),
-  ]
+    name: "Board",
+    triggers: [
+        .animation(.easeOut(duration: 0.12), value: selectedPoints),
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintPoints),
+    ]
 ) {
-  BoardView()
+    BoardView()
 }
 ```
 
-If multiple trigger values change in the same transaction, the trigger closest to
-the start of the array wins. DEBUG builds report `multiTriggerConflict` when a
-lower-priority trigger was ignored.
+The resolver compares snapshots by array position and selects the first changed
+trigger. That one resolution supplies the transaction animation, scope stamp,
+and DEBUG conflict report.
 
-All trigger counts use one structurally stable resolver modifier. The resolver
-compares the current values with the last snapshot, explicitly selects the first
-changed array index, and uses that one result for the transaction animation,
-scope stamp, and conflict warning. It does not depend on the nesting order of
-SwiftUI animation modifiers.
+The same modifier structure handles zero, one, or many triggers.
+`.transaction(value:)` gates delivery by snapshot value. History retains a
+pending resolution across repeated body evaluations so an early evaluation does
+not consume the animation before SwiftUI delivers its transaction.
 
-Keep the trigger array's composition and order stable:
+| Change | Behavior |
+| --- | --- |
+| Initial mount | Establish a baseline. |
+| One or more values change | Select the first changed trigger and stamp the local update. |
+| Several values change | Report ignored changed triggers in DEBUG. |
+| Animation or name changes alone | No value-driven animation. The next value change uses current configuration. |
+| Trigger count changes | Establish a baseline without a trigger animation or conflict warning; preserve content identity. |
+| Trigger order changes | Compare values by their new positions and use those positions for priority. |
+| Value type changes | Treat the values as different, including `Int` versus `Optional<Int>`. |
+| Animations are disabled | Do not apply a value-driven resolution. |
 
-- Changing the number of triggers is treated as a structural update. That update
-  does not animate, but the content view keeps its identity and local state.
-- Reordering uses positional comparison. The new array position determines both
-  which value appears changed and its conflict priority.
-- An empty trigger array creates a named boundary. It strips incoming animation,
-  restores none, preserves the incoming stamp for descendants, and participates
-  in the DEBUG boundary overlay. It does not emit the unscoped-transaction
-  warning produced by `animationBarrier()`, so prefer a barrier when a label is
-  unnecessary.
+The single-value initializer supplies one trigger to this resolver. An empty
+trigger array provides a named boundary and DEBUG outline without value-driven
+animation or the barrier's unstamped-animation warning.
 
-## Value-Driven Scopes
+Value-driven stamps travel downstream from the resolver. Observers above the
+scope do not see the local animation or stamp.
 
-The value-driven initializer is a one-trigger convenience over the same
-value-gated resolver used by multi-trigger scopes. When its value changes, the
-resolver sets the animation and scope stamp on that update's transaction. The
-stamp is downstream-only: views above the scope do not see it.
-
-Animation selection and stamping happen together, so a nested value-driven
-scope takes ownership even when its animation compares equal to an ancestor
-scope's animation.
-
-## Proxy-Driven Scopes
-
-`AnimationScopeProxy.animate(_:)` runs its body with a stamped transaction. The stamp travels widely, but only the matching scope boundary restores its animation. That keeps the animation effect inside the scope's subtree.
+## Proxy-Driven Animation
 
 ```swift
 AnimationScope(.snappy, name: "Menu") { scope in
-  Button("Toggle") {
-    scope.animate {
-      isOpen.toggle()
+    Button("Toggle") {
+        scope.animate {
+            isOpen.toggle()
+        }
     }
-  }
 }
 ```
 
-## Barriers
+The proxy creates a transaction with its animation and stamp, then runs the
+closure with `withTransaction`. The stamp can reach root and descendant
+observers. A matching scope restores the animation after ancestor boundaries
+strip it.
 
-`animationBarrier()` strips only `transaction.animation`. It preserves the internal stamp so a nested `AnimationScope` below the barrier can still restore its own animation.
+Views outside declared boundaries can receive the original animation. Every view
+that reads changed state can still update. Use scopes or barriers around
+unrelated regions that must reject incoming animation.
 
-In DEBUG builds, barriers report only transactions that have animation but no stamp. Stamped transactions are treated as normal scoped traffic.
+## Nested Ownership
 
-## Blocking + Detection, Not Total Containment
+A descendant scope is an independent boundary:
 
-SwiftUI state updates are not structurally contained. A raw `withAnimation` can still update every view that reads the changed state. ScopedAnimation therefore does not claim total containment.
+- An outer proxy animates the outer region; an inner scope strips its animation.
+- An inner proxy's stamp crosses outer boundaries and is restored at the matching
+  inner scope.
+- An outer value-driven animation is stripped at an inner scope.
+- If an inner trigger also changes, it supplies its own animation and stamp,
+  even when its animation equals the outer animation.
 
-The library provides:
+DEBUG `crossScopeAnimationStrip` warnings identify a boundary that removed
+another scope's stamped animation. This is a composition diagnostic.
+`multiTriggerConflict` identifies competing changed values within one scope.
+See <doc:Composition> for choosing a scope structure.
 
-- blocking of incoming animation at scope and barrier boundaries,
-- source tracking for scoped transactions, and
-- DEBUG detection of unstamped animation transactions.
+## Diagnostic Visibility
 
-Use these tools to make animation ownership visible and to catch unscoped animation early. Do not rely on the library to prove that every possible animation leak has been detected.
+A detector reports non-nil animation without a stamp only when that transaction
+passes through its installation point.
 
-## Detection Accuracy
-
-The leak detector observes transactions that pass through the view where it is installed.
-
-| Leak source | Root detector | Subtree detector / barrier sensor |
+| Source | Root detector | Downstream detector or barrier sensor |
 | --- | --- | --- |
-| Raw `withAnimation` or unstamped `withTransaction` | Detected with high confidence | Detected |
-| Raw `.animation(_:value:)` outside a scope | Not detected when the transaction is created below the detector | Detected if the detector is downstream of the source |
-| Scoped transaction with a stamp | Not reported | Not reported |
+| Unstamped `withAnimation` or animated `withTransaction` | Detects passing transactions | Detects passing transactions |
+| Raw value animation created below the root detector | Cannot observe it | Detects it when downstream of its source |
+| Stamped animation | No leak report | No leak report |
 
-The raw `.animation(_:value:)` blind spot is handled with three layers:
+Use screen-level detectors, barriers around static or legacy regions, and local
+detectors on suspicious subtrees. Review raw view animation modifiers because
+they can generate transactions below observation points. A stamp establishes
+scope attribution, not proof that every animated view belongs to the intended
+subtree.
 
-1. barrier sensors around intentionally static or legacy subtrees,
-2. `detectAnimationLeaks()` on suspicious subtrees while debugging, and
-3. a future static rule for teams that want to ban raw `.animation(` calls.
+Warnings are debounced by kind and applicable scope name, with bounded storage.
+Suppressed warnings skip message formatting. Diagnostics and boundary overlays
+compile out of RELEASE builds.
 
-## List Support
+## Framework Compatibility
 
-Phase 1 QA verified `List` behavior on iPhone 17 Simulator running iOS 26.5:
+Boundary behavior depends on SwiftUI transaction propagation. Hosted behavioral
+tests verify supplied transactions on macOS and iOS. They do not verify
+intermediate animation frames.
 
-- `AnimationScope` wrapping a `List` propagated scoped animation into visible row content.
-- `animationBarrier()` in rows stripped incoming raw animation.
-- Row behavior remained correct after scrolling rows offscreen and back.
-
-This relies on SwiftUI transaction propagation through `List`, which is not a documented contract from Apple. Treat it as an observed behavior that is covered by the sample app QA and CI build checks, not as an OS-level guarantee. Re-run the List QA when adopting a new major Xcode or OS release.
+The unit-hosting harness does not reliably observe `List` row transaction hooks.
+Use the example app's List QA screen to verify propagation, row barriers, and
+reuse on the target environment. An example build alone does not establish
+those behaviors.

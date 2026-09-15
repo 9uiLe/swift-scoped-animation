@@ -2,8 +2,9 @@ import SwiftUI
 
 /// A structural boundary for SwiftUI animation.
 ///
-/// `AnimationScope` blocks animations from ancestors, then allows only
-/// animation created by the scope to affect its content.
+/// `AnimationScope` removes incoming animation and supplies animation from its
+/// value triggers or a matching proxy stamp. Descendant SwiftUI modifiers can
+/// still create their own animations; state updates are not contained by a scope.
 ///
 /// Nested scopes do not combine animations for the same subtree. A descendant
 /// scope strips an ancestor scope's stamped animation and restores only its own
@@ -16,10 +17,9 @@ import SwiftUI
 /// }
 /// ```
 public struct AnimationScope<Content: View>: View {
-    private let animation: Animation
     private let triggers: [AnimationTrigger]
     private let name: String?
-    private let content: (AnimationScopeProxy) -> Content
+    private let content: (AnimationScopeStamp) -> Content
 
     @State private var stamp = AnimationScopeStamp()
 
@@ -40,10 +40,7 @@ public struct AnimationScope<Content: View>: View {
         name: String? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self.animation = animation
-        self.triggers = [.animation(animation, value: value)]
-        self.name = name
-        self.content = { _ in content() }
+        self.init(name: name, triggers: [.animation(animation, value: value)], content: content)
     }
 
     /// Creates a multi-trigger value-driven animation scope.
@@ -75,7 +72,6 @@ public struct AnimationScope<Content: View>: View {
         triggers: [AnimationTrigger],
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self.animation = triggers.first?.animation ?? .default
         self.triggers = triggers
         self.name = name
         self.content = { _ in content() }
@@ -98,97 +94,25 @@ public struct AnimationScope<Content: View>: View {
         name: String? = nil,
         @ViewBuilder content: @escaping (AnimationScopeProxy) -> Content
     ) {
-        self.animation = animation
         self.triggers = []
         self.name = name
-        self.content = content
+        self.content = { stamp in
+            content(AnimationScopeProxy(animation: animation, stamp: stamp))
+        }
     }
 
+    /// The scoped content with its animation boundary and value triggers applied.
     public var body: some View {
         let namedStamp = stamp.named(name)
-        let proxy = AnimationScopeProxy(animation: animation, stamp: namedStamp)
 
-        content(proxy)
-            .modifier(
-                AnimationScopeCoreModifier(
-                    triggers: triggers,
-                    scopeName: name,
-                    stamp: namedStamp
-                )
-            )
-            .animationScopeDebugBoundary(stamp: namedStamp)
-    }
-}
-
-private struct AnimationScopeCoreModifier: ViewModifier {
-    let triggers: [AnimationTrigger]
-    let scopeName: String?
-    let stamp: AnimationScopeStamp
-
-    func body(content: Content) -> some View {
-        content
+        content(namedStamp)
             .modifier(
                 ValueAnimationResolverModifier(
                     triggers: triggers,
-                    scopeName: scopeName,
-                    stamp: stamp
+                    stamp: namedStamp
                 )
             )
-            .modifier(AnimationScopeBoundaryModifier(stamp: stamp))
-    }
-}
-
-private struct ValueAnimationResolverModifier: ViewModifier {
-    let triggers: [AnimationTrigger]
-    let scopeName: String?
-    let stamp: AnimationScopeStamp
-
-    @State private var history: AnimationTriggerHistory
-
-    init(
-        triggers: [AnimationTrigger],
-        scopeName: String?,
-        stamp: AnimationScopeStamp
-    ) {
-        self.triggers = triggers
-        self.scopeName = scopeName
-        self.stamp = stamp
-        _history = State(
-            initialValue: AnimationTriggerHistory(
-                initialSnapshot: AnimationTriggerSnapshot(triggers: triggers)
-            )
-        )
-    }
-
-    func body(content: Content) -> some View {
-        let snapshot = AnimationTriggerSnapshot(triggers: triggers)
-        let resolution = history.resolve(current: snapshot, triggers: triggers)
-
-        content.transaction(value: snapshot) { transaction in
-            guard !transaction.disablesAnimations, let resolution else {
-                return
-            }
-
-            transaction.animation = resolution.adoptedAnimation
-            transaction.animationScopeStamp = stamp.withAnimation(resolution.adoptedAnimation)
-
-            #if DEBUG
-                if !resolution.rejectedTriggerIndices.isEmpty {
-                    AnimationScopeRuntimeWarning.report(
-                        .multiTriggerConflict(
-                            site: AnimationScopeRuntimeWarning.Site(
-                                "MultiTriggerConflict",
-                                scopeName: scopeName
-                            ),
-                            scopeName: scopeName,
-                            adoptedTriggerIndex: resolution.adoptedTriggerIndex,
-                            adoptedAnimation: resolution.adoptedAnimation,
-                            rejectedTriggerIndices: resolution.rejectedTriggerIndices,
-                            rejectedAnimations: resolution.rejectedAnimations
-                        )
-                    )
-                }
-            #endif
-        }
+            .modifier(AnimationScopeBoundaryModifier(stamp: namedStamp))
+            .animationScopeDebugBoundary(stamp: namedStamp)
     }
 }

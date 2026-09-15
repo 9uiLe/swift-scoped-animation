@@ -1,43 +1,42 @@
 # ScopedAnimation
 
-Add structural boundaries to SwiftUI animation.
+Declare structural boundaries for SwiftUI animation.
 
 ## Overview
 
-ScopedAnimation is a small SwiftUI library for making animation ownership visible in code and in DEBUG builds. It does three things:
+ScopedAnimation makes animation ownership visible through three operations:
 
-- strips incoming animation transactions at explicit boundaries,
-- stamps transactions created by an `AnimationScope`, and
-- reports unstamped animation transactions during DEBUG diagnostics.
+- boundaries remove incoming animation;
+- scopes supply animation with an ownership stamp; and
+- DEBUG tools report unstamped transactions and draw scope outlines.
 
-It does not promise total animation containment. SwiftUI's `withAnimation` still updates every view that reads changed state. ScopedAnimation gives you a practical model for blocking incoming animation at subtree boundaries and detecting unscoped animation while you work.
+Use a value-driven scope to animate a subtree when a value changes:
 
 ```swift
 AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
-  CardContent(isExpanded: isExpanded)
+    CardContent(isExpanded: isExpanded)
 }
 ```
 
-```swift
-AnimationScope(.snappy, name: "Panel") { scope in
-  Button("Toggle") {
-    scope.animate {
-      isExpanded.toggle()
-    }
-  }
-}
-```
+Use multiple triggers when several values control the same subtree, or a proxy
+when an explicit action determines which state changes animate.
+
+State changes still update every view that reads them. A proxy transaction can
+reach views outside declared boundaries, and a raw animation modifier can create
+animation below a detector. Scopes and barriers provide blocking and detection
+at declared locations.
 
 ## Topics
 
-### Start Here
+### Guides
 
 - <doc:GettingStarted>
 - <doc:Composition>
 - <doc:HowItWorks>
 - <doc:PerformancePlaybook>
 
-### Core API
+### Scope API
 
 - ``AnimationScope``
+- ``AnimationTrigger``
 - ``AnimationScopeProxy``

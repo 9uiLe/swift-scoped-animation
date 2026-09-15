@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Document the complete product contract, architecture, performance model, and
+  validation procedure for new contributors.
+- Resolve trigger history with one comparison pass and defer DEBUG warning
+  formatting until after the debounce decision.
+- Add reproducible DEBUG and RELEASE microbenchmarks for trigger resolution,
+  construction, expensive value equality, and suppressed conflict warnings.
+- Separate scope composition, value resolution, and transaction boundaries; share
+  the strip-then-restore implementation between scopes and standalone barriers.
+- Keep trigger values and animation configuration in one snapshot, pair selected
+  indices with animations, and compile rejected-trigger storage out of RELEASE.
+- Isolate trigger history to the main actor and centralize diagnostic site keys.
+- Fail CI and release verification on formatting warnings with strict linting.
+- Organize behavioral tests by contract under a serialized Swift Testing suite,
+  retain and close every hosting window, reject empty transaction observations,
+  and compare animation values directly.
+- Cover sequential and disabled updates, both transition directions, trigger
+  resizing and type changes, and the root detector's implicit-animation blind spot.
+
+### Fixed
+
+- Distinguish concrete trigger value types after type erasure, including `Int`
+  versus `Optional<Int>` values that Swift can otherwise cast to each other.
+- Prevent overlapping List QA runs and cancel pending checks when leaving the
+  screen without publishing partial results.
+- Hide decorative DEBUG scope outlines from accessibility navigation.
+
 ## 0.2.1 - 2026-07-15
 
 ### Fixed

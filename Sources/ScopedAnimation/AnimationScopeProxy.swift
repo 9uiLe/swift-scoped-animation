@@ -3,7 +3,8 @@ import SwiftUI
 /// A trigger object that runs state changes with a scope-owned animation.
 ///
 /// Use the proxy when an interaction should animate only the subtree inside its
-/// `AnimationScope`.
+/// `AnimationScope`. Other regions must declare their own scope or barrier to block
+/// the transaction's animation; state changes still reach every view that reads them.
 ///
 /// ```swift
 /// AnimationScope(.snappy) { scope in

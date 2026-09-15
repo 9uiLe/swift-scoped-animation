@@ -1,10 +1,11 @@
 import SwiftUI
 
 extension View {
-    /// Prevents incoming animation transactions from reaching a subtree.
+    /// Strips incoming animation while preserving scoped transaction stamps.
     ///
     /// Use a barrier around legacy or intentionally static UI when parent animations should
-    /// not affect it.
+    /// not affect it. A descendant `AnimationScope` can still supply its own value-driven
+    /// animation or restore its matching proxy stamp.
     ///
     /// ```swift
     /// LegacyDashboard()
@@ -12,34 +13,6 @@ extension View {
     /// ```
     /// - Parameter warnsOnLeaks: Pass `false` to silence the debug-only leak warning.
     public func animationBarrier(warnsOnLeaks: Bool = true) -> some View {
-        modifier(AnimationBarrierModifier(warnsOnLeaks: warnsOnLeaks))
-    }
-}
-
-struct AnimationBarrierModifier: ViewModifier {
-    #if DEBUG
-        let warnsOnLeaks: Bool
-
-        init(warnsOnLeaks: Bool) {
-            self.warnsOnLeaks = warnsOnLeaks
-        }
-    #else
-        init(warnsOnLeaks: Bool) {}
-    #endif
-
-    func body(content: Content) -> some View {
-        content.transaction { transaction in
-            #if DEBUG
-                if warnsOnLeaks, transaction.animation != nil,
-                    transaction.animationScopeStamp == nil
-                {
-                    AnimationScopeRuntimeWarning.report(
-                        .barrierLeak(site: AnimationScopeRuntimeWarning.Site("animationBarrier"))
-                    )
-                }
-            #endif
-
-            transaction.animation = nil
-        }
+        modifier(AnimationScopeBoundaryModifier(warnsOnLeaks: warnsOnLeaks))
     }
 }
