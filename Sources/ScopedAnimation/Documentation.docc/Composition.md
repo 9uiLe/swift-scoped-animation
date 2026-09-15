@@ -1,83 +1,95 @@
 # Composition
 
-Build scopes around ownership, not around convenience.
+Match each scope to the subtree that owns its animation.
 
-## Prefer Sibling Scopes
+## Separate Visual Layers
 
-Use sibling scopes when different triggers affect different visual layers. Each
-scope owns one subtree and one animation trigger.
+Use sibling scopes when different values control separate visual layers.
 
 ```swift
 VStack(spacing: 12) {
-  AnimationScope(.easeOut(duration: 0.12), value: selectedID, name: "Selection") {
-    SelectionLayer(selectedID: selectedID)
-  }
+    AnimationScope(.easeOut(duration: 0.12), value: selectedID, name: "Selection") {
+        SelectionLayer(selectedID: selectedID)
+    }
 
-  AnimationScope(.spring(duration: 0.35), value: hintID, name: "Hint") {
-    HintLayer(hintID: hintID)
-  }
+    AnimationScope(.spring(duration: 0.35), value: hintID, name: "Hint") {
+        HintLayer(hintID: hintID)
+    }
 }
 ```
 
-Do not nest scopes to put multiple `(animation, value)` pairs on the same
-subtree. Descendant scopes strip ancestor scoped animations. In DEBUG builds,
-`crossScopeAnimationStrip` reports that composition because the inner boundary
-removed another scope's stamped animation.
+Each boundary rejects animation from the other scope while its own value changes
+supply local animation.
 
-When two triggers truly affect the same view tree, use
-``AnimationScope/init(name:triggers:content:)`` so every trigger is visible in
-one declaration. If multiple trigger values change in the same transaction, the
-first trigger in the array wins and DEBUG builds report `multiTriggerConflict`.
+## Several Values in One Subtree
 
-## Reserve Static Slots
+Declare all value triggers in the scope that owns the content.
 
-Use ordinary SwiftUI layout to reserve space, then use `animationBarrier()` to
-block incoming animation inside the slot.
+```swift
+AnimationScope(
+    name: "Board",
+    triggers: [
+        .animation(.easeOut(duration: 0.12), value: selectedPoints),
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintPoints),
+    ]
+) {
+    BoardView()
+}
+```
+
+The first changed array position wins when values change together. Put the
+primary motion first. A DEBUG `multiTriggerConflict` warning identifies the
+selected and ignored triggers.
+
+## Independent Descendant Regions
+
+Nest scopes when a descendant needs its own animation boundary. The descendant
+strips ancestor animation and supplies its own when eligible. Nesting therefore
+does not combine several triggers over the same subtree.
+
+A DEBUG `crossScopeAnimationStrip` warning names the scopes involved. Check
+whether the descendant should be independent, whether separate visual layers
+need sibling scopes, or whether the same subtree needs multiple triggers.
+
+## Stable Layout Slots
+
+Reserve space with ordinary SwiftUI layout and apply a barrier to the content
+that rejects incoming animation.
 
 ```swift
 ZStack {
-  AdBannerView()
-    .animationBarrier()
+    AdBannerView()
+        .animationBarrier()
 }
 .frame(height: 50)
 ```
 
-The fixed frame is the layout contract. The barrier is the animation contract:
-incoming parent animations are stripped before they reach the banner content.
-This is useful for ad banners, embedded controllers, and other static regions
-where nearby clear, selection, or hint animations must not cause visual drift.
+The frame reserves height. The barrier strips incoming animation within the
+banner. Ancestor layout can still move the slot, and a downstream animation
+modifier can still generate local animation.
 
-## Add A Static Check
+A scope beneath a barrier remains functional: the barrier preserves stamps for
+matching proxy scopes, and value-driven scopes can supply their own animation.
 
-For apps that want to route animation through scopes, use a blunt CI check until
-the planned SwiftLint rule exists. Keep intentional exceptions explicit by
-placing `animation-exception:` on the same line.
+## Review Raw Animation Sources
 
-```sh
-violations="$(
-  rg -n '(withAnimation|\.animation)\s*\(' --glob '*.swift' . \
-    | rg -v 'animation-exception:' \
-    || true
-)"
+Apps can adopt a policy that animation goes through scopes, with documented
+exceptions. Review both `withAnimation` and SwiftUI's view animation modifiers.
 
-if [ -n "$violations" ]; then
-  printf '%s\n' "$violations"
-  exit 1
-fi
-```
+Text searches for `.animation(` also match the supported
+`AnimationTrigger.animation(_:value:)` factory. Treat search results as review
+candidates; a static rule must distinguish those uses before rejecting code.
+Runtime detectors complement review but cannot see animation created below their
+installation point.
 
-Use this check for app code, not as a claim that every animation leak can be
-detected statically. SwiftUI can create raw value-driven animation transactions
-below a root detector, so runtime diagnostics and review still matter.
+## Adopt a Screen
 
-## Adopt One Screen At A Time
+1. Place `detectAnimationLeaks()` near the screen root.
+2. Give each intended animated subtree a scope.
+3. Add barriers to regions that must reject incoming animation.
+4. Enable the overlay and exercise value changes, proxy actions, and nested regions.
+5. Resolve warnings according to the intended ownership.
 
-Small apps do not need a large migration plan. Start with one screen:
-
-1. Add `detectAnimationLeaks()` near the screen root in DEBUG builds.
-2. Wrap the smallest subtree that should animate in `AnimationScope`.
-3. Put `animationBarrier()` around static legacy, ad, or hosting slots.
-4. Run the interaction and resolve warnings before moving to the next screen.
-
-The practical goal is visibility: new unscoped animation should be noisy during
-development, and each intended animation should have a small structural owner.
+Check shared state explicitly. A state mutation can invalidate views outside its
+animation scope, and a proxy's original transaction can reach regions without a
+boundary.

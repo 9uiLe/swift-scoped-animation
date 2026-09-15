@@ -1,7 +1,7 @@
 # AGENTS.md — instructions for coding agents
 
-This repository is an OSS SwiftUI library (working name: `swift-scoped-animation`,
-module `ScopedAnimation`). **`HANDOFF.md` is the single source of truth for product
+This repository is the `swift-scoped-animation` OSS SwiftUI library,
+module `ScopedAnimation`. **`HANDOFF.md` is the single source of truth for product
 scope, API design, and roadmap. Read it before writing any code.**
 
 ## Ground rules
@@ -10,9 +10,10 @@ scope, API design, and roadmap. Read it before writing any code.**
   believe the design in `HANDOFF.md` is wrong or infeasible, stop and report with
   evidence (spike code + findings) instead of silently deviating. Then update
   `HANDOFF.md` in the same PR once agreed.
-- Phase order is mandatory. Phase 0 (spike, see HANDOFF §8) gates everything:
-  if S1–S3 fail, stop and report. Do not start Phase 1 on top of unverified
-  assumptions.
+- Follow the dependency order in HANDOFF §9. Boundary stripping, local
+  restoration, and stamp propagation must be verified before dependent work.
+  If those assumptions fail, stop and report a reproduction; do not silently
+  change the design. See `docs/swiftui-assumptions.md` for the compatibility gates.
 - Never report tests as passing without pasting the actual `swift test` /
   `xcodebuild test` output. If something is untestable, say so explicitly.
 - Zero external dependencies in `Package.swift`. This is a product requirement.
@@ -48,7 +49,7 @@ decisions continue to belong in `HANDOFF.md`.
 ```sh
 swift build
 swift test                          # macOS host tests
-# iOS simulator (required before claiming Phase 1 items done):
+# iOS simulator (required for core semantic changes):
 xcodebuild test -scheme ScopedAnimation \
   -destination 'platform=iOS Simulator,name=iPhone 17' | tail -50
 ```
@@ -59,8 +60,8 @@ you used in the PR description.
 
 ## Code style
 
-- swift-format with the repo's `.swift-format` config (create it in Phase 1;
-  default style, 100-column line length). CI enforces `swift format lint`.
+- Use the repo's `.swift-format` config: default style, 100-column line length.
+  CI enforces `swift format lint --strict`.
 - Public API: 100% DocC doc comments, with a short code example on every public
   type. No `///` boilerplate that restates the signature.
 - `#if DEBUG` guards for all diagnostics code paths; RELEASE builds must compile
@@ -74,19 +75,19 @@ you used in the PR description.
 
 - Framework: Swift Testing (`import Testing`), not XCTest, unless hosting
   requirements force XCTest for a specific case — document why if so.
-- The transaction-spy harness (HANDOFF §9) lives in `Tests/.../Support/`.
+- The transaction-spy harness (HANDOFF §8) lives in `Tests/.../Support/`.
   Every core semantic (barrier, value-driven scope, stamping, leak detection)
   needs at least one spy-based behavioral test, not just unit tests of helpers.
 - Flaky tests are bugs: no `sleep`-based waits; pump the run loop or use
   explicit expectations.
 
-## CI (Phase 1 deliverable)
+## CI
 
 GitHub Actions on a macOS runner with Xcode 26.x:
-build + test (macOS and iOS Simulator), `swift format lint`, DocC build
-(`swift package generate-documentation`), release-config build. Verify the
-runner image and Xcode version actually available on GitHub-hosted runners
-before pinning — do not guess.
+build + test (macOS and iOS Simulator), `swift format lint --strict`, DocC build
+(`xcodebuild docbuild`), RELEASE build and tests, diagnostic symbol audit, and
+example app build. Verify the runner image and Xcode version actually available
+on GitHub-hosted runners before pinning — do not guess.
 
 ## Definition of done (per PR)
 

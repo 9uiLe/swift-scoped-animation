@@ -10,6 +10,7 @@ on:
     branches: [master]
     paths:
       - "Sources/**"
+      - "Benchmarks/**"
       - "Tests/**"
       - "Examples/**"
       - "scripts/**"
@@ -110,8 +111,9 @@ jobs:
 
       - name: Swift format
         run: |
-          swift format lint --configuration .swift-format \
+          swift format lint --strict --configuration .swift-format \
             Package.swift \
+            Benchmarks/*.swift \
             Sources/ScopedAnimation/*.swift \
             Sources/ScopedAnimation/Diagnostics/*.swift \
             Tests/ScopedAnimationTests/*.swift \

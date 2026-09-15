@@ -3,12 +3,6 @@
     import OSLog
     import SwiftUI
 
-    struct AnimationScopeWarning: Equatable, Sendable {
-        let siteID: String
-        let title: String
-        let message: String
-    }
-
     enum AnimationScopeRuntimeWarning {
         struct Site: Hashable, Sendable {
             let kind: String
@@ -73,12 +67,6 @@
             return try operation()
         }
 
-        static func resetForTesting() {
-            lock.withLock { state in
-                state = State()
-            }
-        }
-
         private static func defaultSink(_ warning: AnimationScopeWarning) {
             os_log(
                 .fault,
@@ -130,79 +118,78 @@
         }
     }
 
-    extension AnimationScopeWarning {
-        static func unscopedAnimation(site: AnimationScopeRuntimeWarning.Site) -> Self {
-            AnimationScopeWarning(
-                siteID: site.id,
-                title: "Unscoped animation transaction",
-                message:
-                    "ScopedAnimation detected an animation transaction without an AnimationScope stamp at "
-                    + "\(site.kind). Move the animation into AnimationScope or add animationBarrier() "
-                    + "near the leaking subtree."
-            )
+    enum AnimationScopeWarning: Equatable, Sendable {
+        case unscopedAnimation
+        case barrierLeak
+        case crossScopeAnimationStrip(strippingScopeName: String?, strippedScopeName: String?)
+        case multiTriggerConflict(scopeName: String?, resolution: AnimationTriggerResolution)
+
+        private var site: AnimationScopeRuntimeWarning.Site {
+            switch self {
+            case .unscopedAnimation:
+                .init("detectAnimationLeaks")
+            case .barrierLeak:
+                .init("animationBarrier")
+            case .crossScopeAnimationStrip(let strippingScopeName, _):
+                .init("AnimationScopeBoundary", scopeName: strippingScopeName)
+            case .multiTriggerConflict(let scopeName, _):
+                .init("MultiTriggerConflict", scopeName: scopeName)
+            }
         }
 
-        static func barrierLeak(site: AnimationScopeRuntimeWarning.Site) -> Self {
-            AnimationScopeWarning(
-                siteID: site.id,
-                title: "Animation barrier stripped an unscoped transaction",
-                message:
+        var siteID: String { site.id }
+
+        var title: String {
+            switch self {
+            case .unscopedAnimation:
+                "Unscoped animation transaction"
+            case .barrierLeak:
+                "Animation barrier stripped an unscoped transaction"
+            case .crossScopeAnimationStrip:
+                "AnimationScope boundary stripped another scope's animation"
+            case .multiTriggerConflict:
+                "AnimationScope multi-trigger conflict"
+            }
+        }
+
+        // A transaction hook can run for every descendant. Formatting before debounce
+        // would repeat reflection and string allocation even when the warning is suppressed.
+        var message: String {
+            switch self {
+            case .unscopedAnimation:
+                return
+                    "ScopedAnimation detected an animation transaction without an AnimationScope stamp at "
+                    + "detectAnimationLeaks. Move the animation into AnimationScope or add animationBarrier() "
+                    + "near the leaking subtree."
+            case .barrierLeak:
+                return
                     "animationBarrier() stripped an animation transaction without an AnimationScope stamp. "
                     + "Move the animation into AnimationScope or pass warnsOnLeaks: false when this "
                     + "barrier intentionally silences legacy animation."
-            )
-        }
-
-        static func crossScopeAnimationStrip(
-            site: AnimationScopeRuntimeWarning.Site,
-            strippingScopeName: String?,
-            strippedScopeName: String?
-        ) -> Self {
-            let strippingScope = scopeDisplayName(strippingScopeName)
-            let strippedScope = scopeDisplayName(strippedScopeName)
-
-            return AnimationScopeWarning(
-                siteID: site.id,
-                title: "AnimationScope boundary stripped another scope's animation",
-                message: "AnimationScope \(strippingScope) stripped a stamped animation from "
+            case .crossScopeAnimationStrip(let strippingScopeName, let strippedScopeName):
+                let strippingScope = Self.scopeDisplayName(strippingScopeName)
+                let strippedScope = Self.scopeDisplayName(strippedScopeName)
+                return "AnimationScope \(strippingScope) stripped a stamped animation from "
                     + "AnimationScope \(strippedScope). Nested AnimationScope boundaries block ancestor "
                     + "scope animations. Use sibling scopes for separate subtrees, or "
                     + "`AnimationScope(name:triggers:)` when multiple `(animation, value)` pairs affect "
                     + "the same subtree."
-            )
-        }
-
-        static func multiTriggerConflict(
-            site: AnimationScopeRuntimeWarning.Site,
-            scopeName: String?,
-            adoptedTriggerIndex: Int,
-            adoptedAnimation: Animation,
-            rejectedTriggerIndices: [Int],
-            rejectedAnimations: [Animation]
-        ) -> Self {
-            let scope = scopeDisplayName(scopeName)
-            let adoptedDescription = triggerDescription(
-                index: adoptedTriggerIndex,
-                animation: adoptedAnimation
-            )
-            let rejectedDescriptions = zip(rejectedTriggerIndices, rejectedAnimations)
-                .map { index, animation in
-                    triggerDescription(index: index, animation: animation)
-                }
-                .joined(separator: ", ")
-
-            return AnimationScopeWarning(
-                siteID: site.id,
-                title: "AnimationScope multi-trigger conflict",
-                message:
-                    "AnimationScope \(scope) resolved a simultaneous trigger change in favor of "
+            case .multiTriggerConflict(let scopeName, let resolution):
+                let scope = Self.scopeDisplayName(scopeName)
+                let adoptedDescription = Self.triggerDescription(resolution.winner)
+                let rejectedDescriptions = resolution.rejected
+                    .map(Self.triggerDescription)
+                    .joined(separator: ", ")
+                return "AnimationScope \(scope) resolved a simultaneous trigger change in favor of "
                     + "\(adoptedDescription). Ignored trigger(s): \(rejectedDescriptions). Put the "
                     + "primary motion first in the `triggers` array."
-            )
+            }
         }
 
-        private static func triggerDescription(index: Int, animation: Animation) -> String {
-            "trigger[\(index)] (\(String(describing: animation)))"
+        private static func triggerDescription(_ selection: AnimationTriggerResolution.Selection)
+            -> String
+        {
+            "trigger[\(selection.index)] (\(String(describing: selection.animation)))"
         }
 
         private static func scopeDisplayName(_ name: String?) -> String {

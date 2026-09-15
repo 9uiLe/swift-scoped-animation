@@ -18,206 +18,163 @@ Structural boundaries and DEBUG diagnostics for SwiftUI animation.
   <img src="docs/assets/list-qa-demo.gif" alt="List QA propagation and barrier demo" width="310">
 </p>
 
-ScopedAnimation helps you make animation ownership visible. It blocks incoming animation at explicit boundaries, stamps animation created by `AnimationScope`, and reports unstamped animation transactions in DEBUG builds.
+ScopedAnimation makes animation ownership visible in the view tree. Scopes and
+barriers remove incoming animation, scopes stamp the animation they supply, and
+DEBUG diagnostics report unstamped transactions at observation points.
 
-It is not total animation containment. SwiftUI state updates can still affect every view that reads changed state. The library is about **blocking + detection**.
+State changes still reach every view that reads them. A proxy transaction can
+also animate views outside declared boundaries. Place scopes or barriers around
+regions that must reject incoming animation.
 
-## Requirements
+## Requirements and installation
 
-- Swift 6 language mode
-- iOS 17+
-- macOS 14+
-- tvOS 17+
-- watchOS 10+
-- visionOS 1+
-- No external dependencies
+- iOS 17+, macOS 14+, tvOS 17+, watchOS 10+, visionOS 1+
+- Swift 6 language mode; package manifest requires Swift tools 6.2+
+- Swift Package Manager; no external dependencies
 
-## Installation
-
-Add the package in Xcode:
+Add this URL in Xcode:
 
 ```text
 https://github.com/9uiLe/swift-scoped-animation.git
 ```
 
-Or add it to `Package.swift`:
+Or declare the package and add `ScopedAnimation` to your target's dependencies:
 
 ```swift
 .package(url: "https://github.com/9uiLe/swift-scoped-animation.git", from: "0.2.1")
 ```
 
-Then add `ScopedAnimation` to the target dependencies.
+## Choose the animation owner
 
-## Quick Start
+| Need | API |
+| --- | --- |
+| Animate a subtree when one value changes | `AnimationScope(_:value:name:content:)` |
+| Choose among several value triggers for one subtree | `AnimationScope(name:triggers:content:)` |
+| Animate state changes in an explicit action | `AnimationScope(_:name:content:)` with a proxy |
+| Remove incoming animation without supplying one | `animationBarrier(warnsOnLeaks:)` |
 
-Value-driven scope:
+### One value
 
 ```swift
 import ScopedAnimation
 import SwiftUI
 
 AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
-  CardContent(isExpanded: isExpanded)
+    CardContent(isExpanded: isExpanded)
 }
 ```
 
-Proxy-driven scope:
+The boundary strips ancestor animation. A change to `isExpanded` supplies the
+scope's animation to its content.
+
+### Several values
+
+```swift
+AnimationScope(
+    name: "Board",
+    triggers: [
+        .animation(.easeOut(duration: 0.12), value: selectedPoints),
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintPoints),
+    ]
+) {
+    BoardView()
+}
+```
+
+When several values change together, the first changed trigger in the array
+wins. DEBUG builds report the ignored changed triggers.
+
+Values compare by concrete type and equality. Changing only an animation does
+not trigger motion. Keep the array's count and order stable: resizing establishes
+a new baseline without animation, and reordering compares values by position.
+Content identity and local state survive count changes.
+
+### An explicit action
 
 ```swift
 AnimationScope(.snappy, name: "Disclosure") { scope in
-  DisclosureContent(isOpen: isOpen)
-    .onTapGesture {
-      scope.animate {
-        isOpen.toggle()
-      }
+    Button("Toggle") {
+        scope.animate {
+            isOpen.toggle()
+        }
     }
 }
 ```
 
-Barrier:
+Use `scope.animate(.spring(duration: 0.4)) { ... }` to override the animation for
+one synchronous action. The proxy stamps the transaction; a matching boundary
+can restore it after an ancestor scope or barrier strips its animation.
+
+### A barrier
 
 ```swift
 LegacyDashboard()
-  .animationBarrier()
+    .animationBarrier()
 ```
 
-Diagnostics:
+The barrier removes incoming animation and preserves stamps for descendant
+scopes. Pass `warnsOnLeaks: false` to silence its DEBUG warning for intentionally
+blocked legacy traffic.
+
+A barrier does not reserve layout space or stop a descendant SwiftUI animation
+modifier from generating its own transaction. Use ordinary layout, such as a
+fixed frame, when a region also needs stable dimensions.
+
+## Compose scopes
+
+Use sibling scopes for separate visual layers. Use several triggers in one scope
+when multiple values affect the same subtree.
+
+Every nested scope is an independent boundary. It strips its ancestor's animation
+and supplies its own only when a local trigger changes or its proxy stamp matches.
+DEBUG `crossScopeAnimationStrip` warnings identify cross-scope stripping;
+`multiTriggerConflict` warnings identify competing values within one scope.
+
+An empty trigger array creates a named boundary that appears in the DEBUG overlay.
+Use `animationBarrier()` when a name is unnecessary.
+
+## Inspect animation ownership
 
 ```swift
 RootView()
-  .detectAnimationLeaks()
-  .animationScopeDebugOverlay()
+    .detectAnimationLeaks()
+    .animationScopeDebugOverlay()
 ```
 
-Diagnostics are DEBUG-only and compile out of RELEASE builds.
+Detectors report animation-bearing transactions without a scope stamp. The
+overlay draws named scope boundaries. Both compile out of RELEASE builds.
 
-## Nested Scope Semantics
-
-Nested scopes do not stack animations for the same subtree. Every
-`AnimationScope` boundary first strips the incoming animation, then restores it
-only when the transaction stamp belongs to that exact scope. A descendant scope
-therefore blocks an ancestor scope's value-driven and proxy-driven animation.
-
-That behavior is intentional, but it is easy to misread. One subtree cannot
-express multiple `(animation, value)` pairs by nesting scopes. Split the UI into
-sibling scoped subtrees when each trigger can own a different visual layer, or
-use the multi-trigger initializer when several triggers affect the same subtree:
-
-```swift
-AnimationScope(
-  name: "Board",
-  triggers: [
-    .animation(.easeOut(duration: 0.12), value: selectedPoints),
-    .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintPoints),
-  ]
-) {
-  BoardView()
-}
-```
-
-When multiple trigger values change in the same transaction, the trigger closest
-to the start of the `triggers` array wins. In DEBUG builds,
-`multiTriggerConflict` reports when a lower-priority trigger was ignored.
-
-In DEBUG builds, `crossScopeAnimationStrip` reports when one `AnimationScope`
-boundary strips another scope's stamped animation. Treat that warning as a
-signal to flatten the scopes, split the subtree, switch to multi-trigger, or
-document an intentional exception.
-
-## Composition Guide
-
-Use sibling scopes when separate triggers affect separate visual layers:
-
-```swift
-VStack(spacing: 12) {
-  AnimationScope(.easeOut(duration: 0.12), value: selectedID, name: "Selection") {
-    SelectionLayer(selectedID: selectedID)
-  }
-
-  AnimationScope(.spring(duration: 0.35), value: hintID, name: "Hint") {
-    HintLayer(hintID: hintID)
-  }
-}
-```
-
-Use a reserved-height slot plus a barrier when a subtree should stay visually
-static while nearby content animates. The frame reserves layout height; the
-barrier strips incoming animation transactions from the banner content.
-
-```swift
-ZStack {
-  AdBannerView()
-    .animationBarrier()
-}
-.frame(height: 50)
-```
-
-`animationBarrier()` does not reserve space on its own. Keep the stable layout
-contract in ordinary SwiftUI layout (`frame`, `Grid`, fixed row height), then
-use the barrier to enforce the no-incoming-animation rule inside that slot.
-
-## Detection Accuracy
-
-| Leak source | Root detector | Subtree detector / barrier sensor |
+| Source | Root detector | Detector or barrier downstream of the source |
 | --- | --- | --- |
-| Raw `withAnimation` or unstamped `withTransaction` | Detected with high confidence | Detected |
-| Raw `.animation(_:value:)` outside a scope | Not detected when the transaction is created below the detector | Detected if the detector is downstream of the source |
-| Scoped transaction with a stamp | Not reported | Not reported |
+| Raw `withAnimation` or animated, unstamped `withTransaction` | Detects passing transactions | Detects passing transactions |
+| Raw `.animation(_:value:)` below the root detector | Cannot observe animation created below it | Detects passing transactions |
+| Stamped transaction | Does not report a leak | Does not report a leak |
 
-Raw `.animation(_:value:)` has a known blind spot because SwiftUI can create that transaction below a root detector. Use three layers while debugging:
+Start at a screen root, then place detectors on suspicious subtrees and barriers
+around regions that reject incoming animation. Review raw animation calls because
+runtime observation is limited by placement. Any static rule must distinguish
+SwiftUI view animation modifiers from the supported `AnimationTrigger.animation`
+factory.
 
-1. `animationBarrier()` sensors around static or legacy subtrees,
-2. `detectAnimationLeaks()` on suspicious subtrees, and
-3. static review or a future lint rule for raw `.animation(` usage.
+## Performance and compatibility
 
-## Static Lint Recipe
+Small scopes make the intended animated subtree explicit. They do not prevent
+state invalidation or guarantee fewer body evaluations.
 
-Until the planned SwiftLint rule exists, a small CI script can block accidental
-raw `withAnimation` and `.animation(` calls. Put `// animation-exception: <reason>`
-on the same line for intentional short-term exceptions.
+Trigger equality, trigger construction, and DEBUG diagnostics have costs.
+Use small values when they fully describe the animation condition. The
+[Performance Playbook](Sources/ScopedAnimation/Documentation.docc/PerformancePlaybook.md)
+covers application profiling; [reference measurements](docs/performance.md)
+describe internal CPU costs and their limits.
 
-```sh
-violations="$(
-  rg -n '(withAnimation|\.animation)\s*\(' --glob '*.swift' . \
-    | rg -v 'animation-exception:' \
-    || true
-)"
+Transaction propagation is observed SwiftUI behavior. The automated suite checks
+macOS and iOS hosting. `List` row propagation and cell reuse require the
+[sample QA procedure](Examples/QA.md), with recorded results tied to specific
+environments. Recheck compatibility when adopting a new major Xcode or OS release.
 
-if [ -n "$violations" ]; then
-  printf '%s\n' "$violations"
-  exit 1
-fi
-```
+## Example app
 
-This check is deliberately blunt. Use it in app code or examples where your team
-has decided that all animation should go through `AnimationScope` or a documented
-exception.
-
-## Small App Adoption
-
-For a small SwiftUI app, start with one screen:
-
-1. Add `detectAnimationLeaks()` near the screen root in DEBUG builds.
-2. Wrap the smallest visual subtree that should animate in `AnimationScope`.
-3. Add `animationBarrier()` around static legacy, ad, or hosting slots.
-4. Run the UI and resolve warnings before expanding to the next screen.
-
-The first useful milestone is not total migration. It is making new unscoped
-animation visible while keeping each animated subtree small.
-
-## List Status
-
-The example app includes List QA. On iPhone 17 Simulator with iOS 26.5, Phase 1 QA verified that:
-
-- `AnimationScope` wrapping `List` propagated scoped animation into row content,
-- `animationBarrier()` stripped raw incoming animation in rows, and
-- row behavior survived scrolling offscreen and back.
-
-This depends on observed SwiftUI transaction propagation through `List`, not a documented Apple contract. Re-run the sample QA when adopting a new major Xcode or OS release.
-
-## Example App
-
-Build the sample app:
+The sample contains Compare, Overlay, List QA, and Multi-Trigger screens.
 
 ```sh
 xcodebuild build \
@@ -226,24 +183,26 @@ xcodebuild build \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-The sample contains:
-
-- Before / After comparison
-- DEBUG overlay demo
-- List QA screen
-
 ## Documentation
 
-DocC articles live in `Sources/ScopedAnimation/Documentation.docc/`.
+- [Getting Started](Sources/ScopedAnimation/Documentation.docc/GettingStarted.md):
+  complete usage examples.
+- [Composition](Sources/ScopedAnimation/Documentation.docc/Composition.md):
+  sibling scopes, nested ownership, and static layout slots.
+- [How It Works](Sources/ScopedAnimation/Documentation.docc/HowItWorks.md):
+  transactions, stamps, value resolution, and diagnostic placement.
+- [Design](HANDOFF.md): product contracts, internal architecture, and roadmap.
+- [Contributing](CONTRIBUTING.md): repository map and required checks.
+- [Validation](docs/validation.md): tested environments, command output, and limits.
 
-Local DocC verification uses Xcode:
+Build DocC with Xcode:
 
 ```sh
 xcodebuild docbuild -scheme ScopedAnimation -destination 'generic/platform=iOS'
 ```
 
-The package intentionally does not depend on `swift-docc-plugin`.
+The package does not require `swift-docc-plugin`.
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).

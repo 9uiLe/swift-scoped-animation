@@ -18,7 +18,11 @@ import SwiftUI
 /// ```
 public struct AnimationTrigger {
     let animation: Animation
-    let value: AnyEquatable
+    private let value: AnyEquatable
+
+    func hasSameValue(as other: Self) -> Bool {
+        value == other.value
+    }
 
     /// Creates a trigger that animates when `value` changes.
     public static func animation(_ animation: Animation, value: some Equatable) -> AnimationTrigger
@@ -27,71 +31,13 @@ public struct AnimationTrigger {
     }
 }
 
-struct AnimationTriggerSnapshot: Equatable {
-    let values: [AnyEquatable]
-
-    init(triggers: [AnimationTrigger]) {
-        self.values = triggers.map(\.value)
-    }
-}
-
-struct AnimationTriggerResolution: Sendable {
-    let adoptedTriggerIndex: Int
-    let adoptedAnimation: Animation
-    let rejectedTriggerIndices: [Int]
-    let rejectedAnimations: [Animation]
-}
-
-final class AnimationTriggerHistory {
-    private var latestSnapshot: AnimationTriggerSnapshot
-    private var latestResolution: AnimationTriggerResolution?
-
-    init(initialSnapshot: AnimationTriggerSnapshot) {
-        self.latestSnapshot = initialSnapshot
-    }
-
-    func resolve(
-        current snapshot: AnimationTriggerSnapshot,
-        triggers: [AnimationTrigger]
-    ) -> AnimationTriggerResolution? {
-        guard snapshot != latestSnapshot else {
-            return latestResolution
-        }
-
-        let previousSnapshot = latestSnapshot
-        latestSnapshot = snapshot
-
-        guard previousSnapshot.values.count == snapshot.values.count else {
-            latestResolution = nil
-            return nil
-        }
-
-        let changedIndices = snapshot.values.indices.filter { index in
-            previousSnapshot.values[index] != snapshot.values[index]
-        }
-
-        guard let adoptedTriggerIndex = changedIndices.first else {
-            latestResolution = nil
-            return nil
-        }
-
-        let rejectedTriggerIndices = Array(changedIndices.dropFirst())
-        let resolution = AnimationTriggerResolution(
-            adoptedTriggerIndex: adoptedTriggerIndex,
-            adoptedAnimation: triggers[adoptedTriggerIndex].animation,
-            rejectedTriggerIndices: rejectedTriggerIndices,
-            rejectedAnimations: rejectedTriggerIndices.map { triggers[$0].animation }
-        )
-        latestResolution = resolution
-        return resolution
-    }
-}
-
-struct AnyEquatable: Equatable {
+private struct AnyEquatable: Equatable {
+    private let type: ObjectIdentifier
     private let value: Any
     private let equals: (Any) -> Bool
 
     init<Value: Equatable>(_ value: Value) {
+        self.type = ObjectIdentifier(Value.self)
         self.value = value
         self.equals = { other in
             guard let otherValue = other as? Value else {
@@ -101,7 +47,7 @@ struct AnyEquatable: Equatable {
         }
     }
 
-    static func == (lhs: AnyEquatable, rhs: AnyEquatable) -> Bool {
-        lhs.equals(rhs.value)
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.type == rhs.type && lhs.equals(rhs.value)
     }
 }

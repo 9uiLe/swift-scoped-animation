@@ -92,6 +92,7 @@ extension View {
                     }
                 }
                 .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
         }
     }

@@ -29,6 +29,10 @@ collect_symbols release "${release_dump}"
 markers=(
   AnimationLeakDetectorModifier
   AnimationScopeRuntimeWarning
+  AnimationScopeWarning
+  RuntimeWarningDebouncer
+  AnimationScopeBoundaryPreferenceKey
+  crossScopeAnimationStrip
   AnimationScopeDebugOverlayModifier
   com.apple.runtime-issues
   multiTriggerConflict

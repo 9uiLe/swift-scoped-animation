@@ -169,8 +169,9 @@ local_verification() {
   step "Phase 2: Local verification"
 
   step "swift format lint"
-  swift format lint --configuration .swift-format \
+  swift format lint --strict --configuration .swift-format \
     Package.swift \
+    Benchmarks/*.swift \
     Sources/ScopedAnimation/*.swift \
     Sources/ScopedAnimation/Diagnostics/*.swift \
     Tests/ScopedAnimationTests/*.swift \

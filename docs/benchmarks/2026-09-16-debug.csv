@@ -1,0 +1,16 @@
+configuration,case,iterations,min_ns_per_operation,median_ns_per_operation,max_ns_per_operation,checksum
+DEBUG (-Onone),history/count=1/changed=-1,20000,820.5,839.1,935.4,0
+DEBUG (-Onone),history/count=1/changed=0,20000,1073.8,1089.8,1115.2,140100
+DEBUG (-Onone),history/count=2/changed=-1,20000,1134.6,1149.7,1181.8,0
+DEBUG (-Onone),history/count=2/changed=0,20000,1380.1,1405.9,1418.5,140100
+DEBUG (-Onone),history/count=2/changed=1,20000,1386.6,1401.4,1429.1,280200
+DEBUG (-Onone),history/count=8/changed=-1,20000,2975.3,2992.6,3042.4,0
+DEBUG (-Onone),history/count=8/changed=0,20000,3236.0,3274.2,3284.4,140100
+DEBUG (-Onone),history/count=8/changed=7,20000,3237.7,3244.3,3261.4,1120800
+DEBUG (-Onone),history/count=64/changed=-1,20000,20134.5,20182.1,21323.4,0
+DEBUG (-Onone),history/count=64/changed=0,20000,20435.9,20554.1,22285.6,140100
+DEBUG (-Onone),history/count=64/changed=63,20000,20389.4,20500.0,20598.8,8966400
+DEBUG (-Onone),history/8x1024-element-arrays/changed=7,2000,89003.5,89265.8,89812.8,112800
+DEBUG (-Onone),construct-and-compare/two-8-trigger-snapshots,20000,8949.0,8991.0,9178.8,140100
+DEBUG (-Onone),suppressed-conflict/sites=1,2000,848.5,859.9,912.0,14100
+DEBUG (-Onone),suppressed-conflict/sites=64,2000,1618.0,1633.2,1725.1,14100

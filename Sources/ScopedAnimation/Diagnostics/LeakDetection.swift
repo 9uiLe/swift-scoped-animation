@@ -25,9 +25,7 @@ extension View {
             content.transaction { transaction in
                 if transaction.animation != nil, transaction.animationScopeStamp == nil {
                     AnimationScopeRuntimeWarning.report(
-                        .unscopedAnimation(
-                            site: AnimationScopeRuntimeWarning.Site("detectAnimationLeaks")
-                        )
+                        .unscopedAnimation
                     )
                 }
             }

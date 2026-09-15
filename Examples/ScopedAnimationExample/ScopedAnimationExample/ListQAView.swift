@@ -10,6 +10,7 @@ struct ListQAView: View {
     @State private var barrierPulse = false
     @State private var reusePulse = false
     @State private var didStartAutomaticRun = false
+    @State private var runRequest: ListQARun?
 
     private let rows = 0..<80
 
@@ -23,24 +24,22 @@ struct ListQAView: View {
                         Text(check.title).tag(check)
                     }
                 }
+                .disabled(runRequest != nil)
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
 
                 HStack {
                     Button("Run selected") {
-                        Task {
-                            await run(selectedCheck, proxy: proxy)
-                        }
+                        runRequest = ListQARun(checks: [selectedCheck])
                     }
                     .buttonStyle(.borderedProminent)
 
                     Button("Run all") {
-                        Task {
-                            await runAll(proxy: proxy)
-                        }
+                        runRequest = ListQARun(checks: ListQACheck.allCases)
                     }
                     .buttonStyle(.bordered)
                 }
+                .disabled(runRequest != nil)
 
                 ListQARows(
                     check: selectedCheck,
@@ -50,14 +49,28 @@ struct ListQAView: View {
                 )
             }
             .navigationTitle("List QA")
-            .task {
+            .onAppear {
                 guard ProcessInfo.processInfo.arguments.contains("--auto-list-qa"),
                     !didStartAutomaticRun
                 else {
                     return
                 }
                 didStartAutomaticRun = true
-                await runAll(proxy: proxy)
+                runRequest = ListQARun(checks: ListQACheck.allCases)
+            }
+            .task(id: runRequest?.id) {
+                guard let request = runRequest else { return }
+                defer {
+                    status.cancelRunningCheck()
+                    runRequest = nil
+                }
+                do {
+                    for check in request.checks {
+                        try await run(check, proxy: proxy)
+                    }
+                } catch {
+                    // Leaving the screen cancels its task; a partial run is not a QA result.
+                }
             }
         }
     }
@@ -74,46 +87,44 @@ struct ListQAView: View {
     }
 
     @MainActor
-    private func runAll(proxy: ScrollViewProxy) async {
-        await run(.scope, proxy: proxy)
-        await run(.barrier, proxy: proxy)
-        await run(.reuse, proxy: proxy)
-    }
-
-    @MainActor
-    private func run(_ check: ListQACheck, proxy: ScrollViewProxy) async {
+    private func run(_ check: ListQACheck, proxy: ScrollViewProxy) async throws {
         selectedCheck = check
-        try? await Task.sleep(for: .milliseconds(250))
+        try await Task.sleep(for: .milliseconds(250))
         status.begin(check)
 
         switch check {
         case .scope:
             scopePulse.toggle()
-            try? await Task.sleep(for: .milliseconds(850))
+            try await Task.sleep(for: .milliseconds(850))
             status.finish(check)
         case .barrier:
             withAnimation(.easeInOut(duration: 0.7)) {
                 barrierPulse.toggle()
             }
-            try? await Task.sleep(for: .milliseconds(850))
+            try await Task.sleep(for: .milliseconds(850))
             status.finish(check)
         case .reuse:
             reusePulse.toggle()
-            try? await Task.sleep(for: .milliseconds(850))
+            try await Task.sleep(for: .milliseconds(850))
             withAnimation(.easeInOut(duration: 0.45)) {
                 proxy.scrollTo(79, anchor: .bottom)
             }
-            try? await Task.sleep(for: .milliseconds(700))
+            try await Task.sleep(for: .milliseconds(700))
             withAnimation(.easeInOut(duration: 0.45)) {
                 proxy.scrollTo(0, anchor: .top)
             }
-            try? await Task.sleep(for: .milliseconds(700))
+            try await Task.sleep(for: .milliseconds(700))
             status.begin(.reuse)
             reusePulse.toggle()
-            try? await Task.sleep(for: .milliseconds(850))
+            try await Task.sleep(for: .milliseconds(850))
             status.finish(check)
         }
     }
+}
+
+private struct ListQARun {
+    let id = UUID()
+    let checks: [ListQACheck]
 }
 
 private enum ListQACheck: String, CaseIterable, Identifiable, Sendable {
@@ -197,6 +208,13 @@ private final class ListQAStatus {
     func begin(_ check: ListQACheck) {
         counters.begin(check)
         set(ListQAResult(isRunning: true), for: check)
+    }
+
+    func cancelRunningCheck() {
+        for check in ListQACheck.allCases where result(for: check).isRunning {
+            _ = counters.finish(check)
+            set(ListQAResult(), for: check)
+        }
     }
 
     func finish(_ check: ListQACheck) {

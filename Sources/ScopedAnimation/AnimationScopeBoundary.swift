@@ -1,7 +1,24 @@
 import SwiftUI
 
 struct AnimationScopeBoundaryModifier: ViewModifier {
-    let stamp: AnimationScopeStamp
+    private let stamp: AnimationScopeStamp?
+    #if DEBUG
+        private let warnsOnLeaks: Bool
+    #endif
+
+    init(stamp: AnimationScopeStamp) {
+        self.stamp = stamp
+        #if DEBUG
+            warnsOnLeaks = false
+        #endif
+    }
+
+    init(warnsOnLeaks: Bool) {
+        stamp = nil
+        #if DEBUG
+            self.warnsOnLeaks = warnsOnLeaks
+        #endif
+    }
 
     func body(content: Content) -> some View {
         content.transaction { transaction in
@@ -11,7 +28,10 @@ struct AnimationScopeBoundaryModifier: ViewModifier {
             let incomingStamp = transaction.animationScopeStamp
 
             #if DEBUG
-                if !transaction.disablesAnimations,
+                if warnsOnLeaks, incomingAnimation != nil, incomingStamp == nil {
+                    AnimationScopeRuntimeWarning.report(.barrierLeak)
+                }
+                if let stamp, !transaction.disablesAnimations,
                     incomingAnimation != nil,
                     let incomingStamp,
                     incomingStamp.id != stamp.id,
@@ -19,10 +39,6 @@ struct AnimationScopeBoundaryModifier: ViewModifier {
                 {
                     AnimationScopeRuntimeWarning.report(
                         .crossScopeAnimationStrip(
-                            site: AnimationScopeRuntimeWarning.Site(
-                                "AnimationScopeBoundary",
-                                scopeName: stamp.name
-                            ),
                             strippingScopeName: stamp.name,
                             strippedScopeName: incomingStamp.name
                         )
@@ -32,7 +48,7 @@ struct AnimationScopeBoundaryModifier: ViewModifier {
 
             transaction.animation = nil
 
-            guard !transaction.disablesAnimations,
+            guard let stamp, !transaction.disablesAnimations,
                 incomingStamp?.id == stamp.id,
                 let restoredAnimation = incomingStamp?.animation
             else {
