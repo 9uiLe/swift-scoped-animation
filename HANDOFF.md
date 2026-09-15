@@ -384,3 +384,31 @@ Remaining candidates:
 - Physical watchOS and visionOS validation.
 
 No candidate changes the current scope ownership, boundary, or priority rules.
+
+## 10. Release architecture
+
+The repository owner prepares and publishes releases through local
+`scripts/release.py` commands. GitHub Actions validates source commits with
+read-only permissions; it holds no publication credentials.
+
+- `prepare X.Y.Z` reads a fetched `origin/master` snapshot, versions the
+  CHANGELOG and README on `release/X.Y.Z`, and opens a PR.
+- `check X.Y.Z` validates the owner, upstream repository, versioned documents,
+  source SHA, exact master push CI, and existing tag/Release state.
+- `publish X.Y.Z` repeats validation, creates an annotated `vX.Y.Z` tag and
+  matching draft Release, then publishes and verifies the immutable Release.
+
+SwiftPM can consume a version as soon as its remote tag exists, so all
+publication prerequisites must hold before tag creation. The required CI jobs
+are `build-test-docs` and `Release tooling checks`. Documentation-only master
+commits run both jobs; another SHA's success cannot qualify.
+
+A retry resumes from an existing annotated tag's commit. Tags are never moved,
+deleted, or replaced by the tool. Matching published immutable releases return
+their URL without writes. Conflicting metadata or CI results stop publication.
+
+The package uses stable numeric command versions and `v`-prefixed tags, with
+source-only GitHub Releases. The owner selects versions and merges release
+preparation PRs. The [release guide](docs/releasing.md) defines prerequisites,
+protection settings, and recovery; standard-library Python tests exercise the
+publication state machine without GitHub writes.

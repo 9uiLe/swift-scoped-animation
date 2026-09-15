@@ -1,22 +1,12 @@
 name: CI
 
+# Release publication requires push CI for the exact master commit, including
+# commits that only version README and CHANGELOG.
 on:
-  # No paths filter on pull_request: this job is a required status check, so it
-  # must report on every PR. A paths-filtered PR (docs-only, etc.) would never
-  # start the run, leaving the required check permanently pending and the PR
-  # unmergeable. The push trigger keeps its paths filter to save minutes.
   pull_request:
   push:
     branches: [master]
-    paths:
-      - "Sources/**"
-      - "Benchmarks/**"
-      - "Tests/**"
-      - "Examples/**"
-      - "scripts/**"
-      - "Package.swift"
-      - ".swift-format"
-      - ".github/workflows/ci.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,6 +18,18 @@ permissions:
   contents: read
 
 jobs:
+  release-tooling:
+    name: Release tooling checks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Test release commands
+        run: python3 -m unittest discover -s scripts/tests -v
+
   build-test-docs:
     # Pinned: macos-latest can still resolve to macos-15 (default Xcode 16.4 /
     # Swift 6.1), which cannot parse this package's swift-tools-version 6.2.
@@ -36,6 +38,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Show Xcode version
         run: xcodebuild -version

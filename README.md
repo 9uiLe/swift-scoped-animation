@@ -193,6 +193,7 @@ xcodebuild build \
   transactions, stamps, value resolution, and diagnostic placement.
 - [Design](HANDOFF.md): product contracts, internal architecture, and roadmap.
 - [Contributing](CONTRIBUTING.md): repository map and required checks.
+- [Releasing](docs/releasing.md): owner commands, commit validation, and publication recovery.
 - [Validation](docs/validation.md): tested environments, command output, and limits.
 
 Build DocC with Xcode:
