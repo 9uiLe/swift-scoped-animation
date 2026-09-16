@@ -2,42 +2,89 @@
 
 [日本語](CONTRIBUTING.md) | English
 
-Japanese is the primary language of this repository. This is the English edition.
+Development connects product contracts, implementation, and verification evidence.
+Start with [README](README.en.md) for usage and [HANDOFF.md](HANDOFF.md) for product
+scope, public API, semantics, and roadmap.
 
-Read the product contract, locate the behavior you are changing, and validate it
-on the supported hosting environments.
+## Development workflow
 
-## Source of Truth
+1. Read the relevant design contract, implementation, and tests.
+2. For public API, semantic, or roadmap-order changes, update the design and explain the reason in the PR.
+3. Update implementation, contract tests, DocC, and relevant documents together.
+4. Record user-facing changes under `## Unreleased` in `CHANGELOG.md`.
+5. Run validation and include the environment, actual output, and unverified areas in the PR.
 
-`HANDOFF.md` is the design source of truth. Do not change public API, semantics, or roadmap phase order without updating the design and explaining the reason in the pull request.
+The product provides **animation blocking and detection**. State changes update
+views outside scopes, and proxy transactions reach regions without boundaries.
+Documentation and tests must reflect that scope of behavior.
 
-## Repository Map
+## Language policy
+
+Japanese is the primary language. Issues, PRs, and reports in English are welcome.
+
+| Content | Language and maintenance |
+| --- | --- |
+| Design, operating guides, DocC, API and implementation comments | Japanese |
+| Diagnostics, errors, CLI guidance, sample UI, test display names | Japanese |
+| Issues, PRs, commit messages | Japanese by default; commits also explain motivation |
+| README, contribution guide, security policy, code of conduct | Japanese and `.en.md` English editions |
+| API, type, variable and file names, CLI subcommands, machine-facing identifiers | English |
+| Execution logs, measurements, external quotations, MIT license | Original text |
+
+English editions describe the same contracts needed to use and contribute to the
+library. Provide reciprocal links and update corresponding content in the same
+PR. Detailed design and operating guides, including DocC, are maintained in Japanese.
+
+Tools depend on these fixed spellings:
+
+- Required CI jobs: `build-test-docs`, `Release tooling checks`
+- CHANGELOG headings: `## Unreleased`, `## X.Y.Z - YYYY-MM-DD`
+- DocC syntax: `Overview`, `Topics`, `Parameter`, and related directives
+
+Both READMEs must declare the same installation version. Release commands update
+both and check for missing files, duplicate declarations, and version mismatches.
+
+## Information ownership
+
+| Information | Location |
+| --- | --- |
+| Product scope, API contracts, internal responsibilities, roadmap | `HANDOFF.md` |
+| Installation and API usage | README, DocC, public API doc comments |
+| Implementation mechanics | Code names, types, and control flow |
+| Required behavior | Test names, setup, and assertions |
+| Motivation for a change | Commit history |
+| Non-obvious constraints that rule out a simpler implementation | Implementation comments |
+| User-facing changes and migration steps | `CHANGELOG.md` |
+| Environment, source identity, actual output, observation limits | `docs/validation.md`, performance and QA records |
+
+Design and usage guides define their own terms and prerequisites. Readers should
+not need a conversation, an earlier PR, or the order of implementation work.
+Validation records state their dates and scope so each result is tied to what that
+run actually verified.
+
+## Repository map
 
 | Path | Responsibility |
 | --- | --- |
-| `Sources/ScopedAnimation/` | Scope composition, trigger resolution, boundaries, proxies, and stamps |
-| `Sources/ScopedAnimation/Diagnostics/` | DEBUG warnings, leak detection, and overlays |
+| `Sources/ScopedAnimation/` | Scope composition, value resolution, boundaries, proxies, stamps |
+| `Sources/ScopedAnimation/Diagnostics/` | DEBUG warnings, leak detection, overlay |
 | `Sources/ScopedAnimation/Documentation.docc/` | Public API guides |
-| `Tests/ScopedAnimationTests/` | Behavioral and pure contract tests |
-| `Tests/ScopedAnimationTests/Support/` | Hosting, transaction recording, and test fixtures |
+| `Tests/ScopedAnimationTests/` | Behavioral and pure tests grouped by contract |
+| `Tests/ScopedAnimationTests/Support/` | Hosting, transaction recording, fixtures |
 | `Examples/ScopedAnimationExample/` | Interactive iOS sample |
-| `Examples/QA.md` | Manual QA procedure and environment-specific results |
-| `Benchmarks/` | Internal CPU measurement fixtures and method |
-| `docs/` | Compatibility assumptions, reference measurements, and validation evidence |
+| `Examples/QA.md` | Manual QA procedures and observations |
+| `Benchmarks/` | Internal CPU measurement code and method |
+| `scripts/`, `scripts/tests/` | Release, benchmark and diagnostic-audit commands; release-tooling tests |
+| `docs/` | Compatibility assumptions, reference measurements, validation records, release guide |
 
-The [design](HANDOFF.md) defines each component's responsibility. The
-[validation record](docs/validation.md) lists measured coverage and limitations.
-
-## Requirements
+## Development requirements
 
 - Xcode 26.x / Swift 6.3
-- SwiftPM only
-- Zero external dependencies
-- Swift 6 language mode
-- Strict concurrency enabled
+- SwiftPM, no external dependencies
+- Swift 6 language mode, complete strict concurrency checking
 - Python 3.10+ for release-tooling tests (standard library only)
 
-## Local Checks
+## Local checks
 
 Run these before opening a pull request:
 
@@ -69,61 +116,48 @@ xcodebuild build \
 
 If `iPhone 17` is unavailable, use the newest available iPhone simulator and record the device name.
 
-## Documentation
 
-Public API needs DocC comments. Describe the model as blocking and detection;
-state changes and all animation are not confined to a scope.
+CI validates the package and release tooling with read-only permissions. Include
+actual output when reporting success and identify checks that were not run.
+Follow [Examples/QA.md](Examples/QA.md) for manual QA.
 
-## Language policy
+## API documentation and diagnostics
 
-- Japanese is the primary language for design documents, DocC, API and implementation
-  comments, diagnostic/error messages, sample UI, issues, PRs, and commit messages.
-  Commit messages must also explain the motivation for the change.
-- Maintain English editions of README, CONTRIBUTING, SECURITY, and CODE_OF_CONDUCT
-  with the `.en.md` suffix and reciprocal links. Update both editions in the same PR.
-- Issues and PRs in English are welcome. Design and operating guides without an
-  English edition use Japanese.
-- Keep API/type/variable/file names, CLI subcommands, and machine-facing identifiers
-  in English. Preserve required CI job names, CHANGELOG `## Unreleased` and version
-  headings, and DocC syntax such as `Overview`, `Topics`, and `Parameter`.
-- Keep execution logs, historical measurements, and external quotations verbatim.
-  LICENSE contains the original English MIT license.
-- Keep installation versions identical in both READMEs. Release commands update
-  and validate both editions.
+Document every public API's contract and usage with DocC; include a short example
+for every public type. Guard diagnostic implementations with `#if DEBUG`.
+Update markers in `scripts/verify-release-diagnostics.sh` when adding or renaming
+diagnostics. The audit verifies their presence in DEBUG before checking their
+absence from RELEASE binaries using `strings` / `nm`.
 
-## Diagnostics
+## Test design
 
-Diagnostics code paths must be guarded with `#if DEBUG`. When checking that code is absent from RELEASE artifacts, use a positive DEBUG control and inspect binaries with `strings` or `nm`.
+Use Swift Testing and group tests by contract. Hosting and warning-capture tests
+belong under the serialized `AnimationScopeBehaviorTests` suite so run-loop updates
+and replacement of the global warning sink cannot overlap. Retain each host and
+close it with `defer`. Use the run loop or explicit expectations to wait.
 
-## Tests
+An empty transaction-spy recording must fail even a negative animation assertion.
+Compare `Animation` values directly. Check the stamp on the same recorded
+transaction when asserting ownership. Keep pure value-comparison, trigger-selection,
+and bounded-debounce tests independent of hosting.
 
-Behavioral tests are grouped by contract in `Tests/ScopedAnimationTests/`; their
-hosting views, models, and transaction spy live in `Support/`.
+Release-tooling tests use temporary Git repositories and simulated GitHub
+responses. They must not publish real tags or releases.
 
-Use Swift Testing. Add hosting and warning-capture tests under the serialized
-`AnimationScopeBehaviorTests` suite so run-loop updates and the global warning
-sink cannot overlap. Retain each host and close it with `defer`.
-
-A negative animation assertion must first observe a transaction. The recorder
-reports an issue for empty observations, and compares `Animation` values directly.
-When asserting ownership, check the animation and stamp on the same recorded
-transaction.
-Keep pure tests independent of SwiftUI hosting when they exercise selection or
-bounded debounce behavior.
-
-## Performance Measurements
+## Performance measurements
 
 Run `bash scripts/benchmark-performance.sh release` and
-`bash scripts/benchmark-performance.sh debug` sequentially with no concurrent
-builds or simulator work. Follow [Benchmarks/README.md](Benchmarks/README.md).
-Record compiler flags, environment, operation definitions, and raw timings.
-Do not infer frame-rate or allocation improvements from internal CPU timings.
+`bash scripts/benchmark-performance.sh debug` sequentially, without concurrent
+builds or simulator work. Follow [the benchmark procedure](Benchmarks/README.md)
+and record the environment, compiler settings, operation definitions, and raw
+values. Internal CPU timings do not establish frame-rate or allocation-count
+improvements. Profile applications on their target devices.
 
 ## Releasing
 
-The owner uses local `scripts/release.py` commands to prepare a release PR,
-verify the merged source commit, and publish its annotated tag and GitHub
-Release. GitHub Actions validates commits with read-only permissions.
+The owner merges a release-document PR and verifies master push CI for its source
+SHA before publishing. The [release guide](docs/releasing.md) defines authentication,
+repository protection, rejection conditions, and recovery.
 
 ```sh
 ./scripts/release.py prepare X.Y.Z --dry-run
@@ -133,11 +167,7 @@ Release. GitHub Actions validates commits with read-only permissions.
 ./scripts/release.py publish X.Y.Z
 ```
 
-Replace `X.Y.Z` with the chosen stable version. Tags use `vX.Y.Z`.
-Publication requires both `build-test-docs` and `Release tooling checks` for
-the exact source SHA, consistent Japanese/English README and CHANGELOG versions, and Immutable
-releases enabled on GitHub.
-
-See [the release guide](docs/releasing.md) for authentication, repository
-protection, command behavior, and recovery. `scripts/release.sh` forwards the
-same subcommands to Python.
+`X.Y.Z` is the chosen numeric stable version. Publication requires both mandatory
+jobs to succeed, matching CHANGELOG and README versions in both languages, and
+GitHub Immutable releases enabled. Artifacts are an annotated `vX.Y.Z` tag and a
+source-only GitHub Release. `scripts/release.sh` forwards the same subcommands to Python.

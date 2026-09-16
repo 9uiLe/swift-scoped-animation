@@ -2,7 +2,7 @@
 
 日本語 | [English](README.en.md)
 
-SwiftUI アニメーションの境界を宣言し、DEBUG 診断で意図しない伝播を見つけるライブラリです。
+アニメーションを所有する領域を、SwiftUI のビュー構造で宣言するライブラリです。
 
 <p align="center">
   <a href="https://github.com/9uiLe/swift-scoped-animation/actions/workflows/ci.yml"><img src="https://github.com/9uiLe/swift-scoped-animation/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -15,60 +15,73 @@ SwiftUI アニメーションの境界を宣言し、DEBUG 診断で意図しな
   <img src="docs/assets/overlay-hero.gif" alt="名前付きスコープの境界を表示する DEBUG オーバーレイ" width="640">
 </p>
 
-<p align="center">
-  <img src="docs/assets/compare-demo.gif" alt="スコープ導入前後の比較" width="310">
-  <img src="docs/assets/list-qa-demo.gif" alt="List の伝播とバリアの動作確認" width="310">
-</p>
+## 基本モデル
 
-ScopedAnimation は、アニメーションの所有者をビューの構造で表します。
-スコープとバリアは外から届くアニメーションを取り除き、スコープが与えるアニメーションには
-所有者を示すスタンプを付けます。DEBUG 診断は、観測点を通るスタンプのないトランザクションを報告します。
+SwiftUI は、状態変更に伴うアニメーションを `Transaction` でビューへ伝えます。
+ScopedAnimation は、その経路に境界を置きます。
 
-状態の変更は、その状態を読むすべてのビューに届きます。プロキシのトランザクションは、
-境界を宣言していないビューもアニメーションさせることがあります。
-外からのアニメーションを受け取りたくない領域には、スコープかバリアを配置してください。
+- **スコープ**は外からのアニメーションを取り除き、値の変更や明示的な操作に応じて自身のアニメーションを与えます。
+- **バリア**は外からのアニメーションを取り除きます。自身ではアニメーションを与えません。
+- **スタンプ**はアニメーションの所有者を示す内部情報です。DEBUG 診断は、観測点を通るスタンプのないアニメーションを報告します。
 
-## 動作要件と導入
+状態を読むビューは、スコープの内外を問わず更新されます。プロキシによる明示的な操作のトランザクションも、
+境界のない領域へ届きます。外からのアニメーションを拒否する領域には、スコープかバリアを配置してください。
+
+## 導入
 
 - iOS 17+、macOS 14+、tvOS 17+、watchOS 10+、visionOS 1+
-- Swift 6 言語モード。パッケージ定義には Swift tools 6.2+ が必要
-- Swift Package Manager のみ。外部依存なし
+- Swift 6 言語モード、Swift tools 6.2+
+- Swift Package Manager、外部依存なし
 
-Xcode で次の URL を追加します。
+Xcode に次のパッケージ URL を追加します。
 
 ```text
 https://github.com/9uiLe/swift-scoped-animation.git
 ```
 
-またはパッケージを宣言し、ターゲットの依存に `ScopedAnimation` を追加します。
+`Package.swift` では依存を宣言し、対象ターゲットに `ScopedAnimation` プロダクトを追加します。
 
 ```swift
 .package(url: "https://github.com/9uiLe/swift-scoped-animation.git", from: "0.2.1")
 ```
 
-## アニメーションの所有者を選ぶ
+## 値の変更でアニメーションさせる
 
-| 用途 | API |
-| --- | --- |
-| 1 つの値が変わったらサブツリーをアニメーションさせる | `AnimationScope(_:value:name:content:)` |
-| 同じサブツリーの複数の値からアニメーションを選ぶ | `AnimationScope(name:triggers:content:)` |
-| 明示的な操作に含まれる状態変更をアニメーションさせる | プロキシを受け取る `AnimationScope(_:name:content:)` |
-| 自分ではアニメーションを与えず、外からのアニメーションを取り除く | `animationBarrier(warnsOnLeaks:)` |
-
-### 1 つの値を監視する
+`AnimationScope` で囲んだ内容が、監視する値の変更に応じて動きます。
 
 ```swift
 import ScopedAnimation
 import SwiftUI
 
-AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
-    CardContent(isExpanded: isExpanded)
+struct ExpandableCard: View {
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack {
+            Button("詳細を切り替え") {
+                isExpanded.toggle()
+            }
+
+            AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
+                VStack(alignment: .leading) {
+                    Text("売上")
+                    if isExpanded {
+                        Text("月次の詳細")
+                            .transition(.opacity)
+                    }
+                }
+            }
+        }
+    }
 }
 ```
 
-境界が祖先のアニメーションを取り除きます。`isExpanded` が変わると、スコープのアニメーションが内容に適用されます。
+初回表示では比較の基準を設定します。`isExpanded` が変わると、スコープが指定したアニメーションを内容へ渡します。
+祖先のアニメーションは境界で取り除かれます。
 
-### 複数の値を監視する
+### 同じ領域に複数の条件がある場合
+
+値とアニメーションの組を、優先する順に並べます。
 
 ```swift
 AnimationScope(
@@ -82,56 +95,60 @@ AnimationScope(
 }
 ```
 
-複数の値が同時に変わると、配列の先頭に最も近い変更済みトリガーを採用します。
-DEBUG ビルドでは、採用しなかった変更済みトリガーも報告します。
+同時に複数の値が変わると、先頭に最も近い変更済みトリガーのアニメーションをサブツリー全体に使います。
+DEBUG では不採用の変更も `multiTriggerConflict` として報告します。
 
-値は具象型と等価性の両方で比較します。アニメーションの設定だけを変えても動きません。
-配列の要素数を変えると、アニメーションを開始せず比較の基準を設定し直します。
-並べ替えた場合は、新しい位置で値を比較します。意図した変更でなければ、要素数と順序を一定に保ってください。
-要素数が変わっても、内容のビューの同一性とローカル状態は維持されます。
+比較は配列位置ごとに行い、具象型と値が両方等しければ変更なしとします。名前やアニメーション設定だけでは動きません。
+要素数の変更は、内容の同一性とローカル状態を保ったまま、アニメーションなしで比較基準を設定し直します。
+並べ替えは新しい位置での比較になります。意図した構成変更でなければ、要素数と順序を一定に保ってください。
 
-### 明示的な操作をアニメーションさせる
+## 明示的な操作でアニメーションさせる
+
+内容のクロージャで受け取るプロキシの `animate` に、同期的な状態変更を渡します。
 
 ```swift
 AnimationScope(.snappy, name: "Disclosure") { scope in
-    Button("切り替え") {
-        scope.animate {
-            isOpen.toggle()
+    VStack {
+        Button("切り替え") {
+            scope.animate {
+                isOpen.toggle()
+            }
         }
+        DisclosureContent(isOpen: isOpen)
     }
 }
 ```
 
-`scope.animate(.spring(duration: 0.4)) { ... }` で、1 回の同期的な操作に使うアニメーションを指定できます。
-プロキシはトランザクションにスタンプを付けます。祖先のスコープやバリアがアニメーションを取り除いても、
-ID が一致する境界で復元できます。
+`scope.animate(.spring(duration: 0.4)) { ... }` は、その操作に使うアニメーションを指定します。
+プロキシが付けたスタンプは祖先の境界を通過し、所有者の ID が一致するスコープでアニメーションを復元します。
 
-### バリアで遮断する
+## 境界を配置する
+
+| 目的 | 構成 |
+| --- | --- |
+| 異なる表示レイヤーを独立して動かす | 兄弟スコープ |
+| 同じサブツリーの複数条件に優先順位を付ける | 1 スコープの複数トリガー |
+| 子孫に独立したアニメーションの所有者を置く | 入れ子のスコープ |
+| 外からのアニメーションを取り除く | `animationBarrier()` |
+| DEBUG に名前付き境界を表示し、値駆動アニメーションは与えない | `AnimationScope(name:triggers:content:)` に空配列 |
+
+入れ子のスコープは祖先のアニメーションを取り除き、自身のトリガーやプロキシに応じて動きます。
+DEBUG の `crossScopeAnimationStrip` は、このスコープ間の遮断を示します。
+
+バリアは、次のように適用します。
 
 ```swift
-LegacyDashboard()
+StatusPanel()
     .animationBarrier()
 ```
 
-バリアは外から届くアニメーションを取り除き、子孫のスコープのためにスタンプを保持します。
-既存コードのアニメーションを意図的に遮断する場合は、`warnsOnLeaks: false` で DEBUG 警告を抑制できます。
+スタンプは子孫のために保持します。スタンプのないアニメーションを除去したときの DEBUG 警告は、
+`animationBarrier(warnsOnLeaks: false)` で抑制できます。空のトリガー配列によるスコープには、このバリア警告はありません。
 
-バリアはレイアウト領域を確保せず、子孫の SwiftUI 修飾子が独自のアニメーションを生成することも妨げません。
-領域の大きさも固定したい場合は、固定フレームなど通常のレイアウトを併用します。
+バリアはレイアウト領域を確保しません。固定の大きさが必要なら通常のフレーム指定を併用します。
+また、境界より下の SwiftUI アニメーション修飾子は独自のアニメーションを生成できます。
 
-## スコープを組み合わせる
-
-別々の表示レイヤーには兄弟スコープを使います。同じサブツリーを複数の値が制御する場合は、
-1 つのスコープに複数のトリガーを宣言します。
-
-入れ子のスコープは、それぞれ独立した境界です。祖先のアニメーションを取り除き、
-自身の値が変わったとき、または自身のプロキシスタンプと一致したときにアニメーションを与えます。
-DEBUG の `crossScopeAnimationStrip` はスコープ間の遮断を、`multiTriggerConflict` は同じスコープ内の競合を示します。
-
-空のトリガー配列は、DEBUG オーバーレイに表示される名前付き境界になります。
-名前が不要なら `animationBarrier()` を使ってください。
-
-## 所有者と境界を確認する
+## DEBUG 診断
 
 ```swift
 RootView()
@@ -139,39 +156,39 @@ RootView()
     .animationScopeDebugOverlay()
 ```
 
-検出器は、スコープのスタンプがないアニメーション付きトランザクションを報告します。
-オーバーレイは、名前付きスコープの境界を描画します。どちらの診断実装も RELEASE ビルドから除去されます。
+検出器は、スタンプのないアニメーション付きトランザクションを報告します。オーバーレイはスコープの境界と名前を表示します。
+診断実装は RELEASE ビルドから除去されます。
 
-| 発生源 | ルートの検出器 | 発生源より下流の検出器またはバリア |
+| 発生源 | ルートの検出器 | 発生源より下流の検出器・バリア |
 | --- | --- | --- |
-| 直接の `withAnimation`、またはスタンプのないアニメーション付き `withTransaction` | 通過するトランザクションを検出 | 通過するトランザクションを検出 |
-| ルート検出器より下にある直接の `.animation(_:value:)` | 下で生成されたアニメーションは観測不可 | 通過するトランザクションを検出 |
-| スタンプ付きトランザクション | リークを報告しない | リークを報告しない |
+| スタンプのない `withAnimation` / アニメーション付き `withTransaction` | 通過時に検出 | 通過時に検出 |
+| ルートより下の直接の `.animation(_:value:)` | 観測不可 | 通過時に検出 |
+| スタンプ付きトランザクション | リーク報告なし | リーク報告なし |
 
-まず画面のルートに検出器を置き、調査対象のサブツリーにも必要に応じて追加します。
-外からのアニメーションを拒否する領域にはバリアを置きます。観測できる範囲は配置に依存するため、
-直接のアニメーション呼び出しもレビューしてください。静的チェックでは、SwiftUI のビュー修飾子と、
-サポートされる `AnimationTrigger.animation` ファクトリーを区別する必要があります。
+観測できる範囲は配置に依存します。画面ルートと調査対象のサブツリーに検出器を置き、
+直接のアニメーション呼び出しも確認してください。コード検索では SwiftUI の修飾子と
+`AnimationTrigger.animation(_:value:)` ファクトリーを区別します。
 
-## 性能と互換性
+## 性能と検証範囲
 
-スコープを小さくすると、動かすサブツリーを明確にできます。
-状態によるビューの無効化を防いだり、`body` の評価回数を減らしたりする保証はありません。
+スコープは、動かすサブツリーを明示します。状態による無効化、`body` の評価回数、フレームレートは制御しません。
+トリガーの生成と等価比較にはコストがあるため、条件を十分に表す小さな値を使ってください。
+[性能ガイド](Sources/ScopedAnimation/Documentation.docc/PerformancePlaybook.md)はアプリの計測を、
+[参考計測](docs/performance.md)は内部の CPU コストを扱います。
 
-トリガーの生成・等価比較・DEBUG 診断にはコストがあります。
-条件を十分に表現できる範囲で、小さな値を使ってください。
-[性能ガイド](Sources/ScopedAnimation/Documentation.docc/PerformancePlaybook.md)ではアプリの計測方法を、
-[参考計測](docs/performance.md)では内部の CPU コストと計測の限界を説明しています。
+トランザクション伝播は macOS / iOS のホストテストで検証します。
+`List` 行への伝播、再利用、実際の描画は[サンプル QA](Examples/QA.md)で環境ごとに確認します。
+OS や Xcode のメジャー更新時は、[互換性の前提](docs/swiftui-assumptions.md)を再検証してください。
 
-トランザクション伝播は、SwiftUI 上で観測された挙動に依存します。
-自動テストは macOS と iOS のホスティング環境で検証しています。
-`List` 行への伝播やセルの再利用には、[サンプルの QA 手順](Examples/QA.md)による環境ごとの確認が必要です。
-Xcode や OS のメジャーバージョンを更新するときは、互換性を再確認してください。
+## サンプル
 
-## サンプルアプリ
+比較、オーバーレイ、リスト検証、複数トリガーを操作できます。サンプル UI は日本語です。
+掲載 GIF は英語 UI で収録した動作例です。
 
-比較・オーバーレイ・リスト検証・複数トリガーの画面を収録しています。
-上のデモ画像は、収録時の英語 UI を表示しています。
+<p align="center">
+  <img src="docs/assets/compare-demo.gif" alt="直接のアニメーションとスコープの比較" width="310">
+  <img src="docs/assets/list-qa-demo.gif" alt="List の伝播とバリアの動作確認" width="310">
+</p>
 
 ```sh
 xcodebuild build \
@@ -180,28 +197,27 @@ xcodebuild build \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-## ドキュメント
+## 文書の案内
 
-- [使い始める](Sources/ScopedAnimation/Documentation.docc/GettingStarted.md)：実行可能な使用例
-- [組み合わせ方](Sources/ScopedAnimation/Documentation.docc/Composition.md)：兄弟・入れ子のスコープと固定レイアウト
-- [仕組み](Sources/ScopedAnimation/Documentation.docc/HowItWorks.md)：トランザクション・スタンプ・値の解決・診断の配置
-- [設計](HANDOFF.md)：製品の契約・内部構造・ロードマップ
-- [貢献ガイド](CONTRIBUTING.md)：リポジトリ構成と必要な検証
-- [リリース手順](docs/releasing.md)：所有者向けコマンド・コミット検証・公開の再開
-- [検証記録](docs/validation.md)：実行環境・出力・未検証の範囲
-- [セキュリティ方針](SECURITY.md)・[行動規範](CODE_OF_CONDUCT.md)
+日本語を基本言語とし、README・貢献ガイド・セキュリティ方針・行動規範に英語版を提供します。
+文書の責務と同期方法は[貢献ガイドの言語方針](CONTRIBUTING.md#言語方針)に定義しています。
 
-日本語を基本言語とし、README・貢献ガイド・セキュリティ方針・行動規範には英語版も用意しています。
-言語ごとの管理方針は[貢献ガイド](CONTRIBUTING.md#言語方針)を参照してください。
+| 読みたいこと | 文書 |
+| --- | --- |
+| API の使い方 | [使い始める](Sources/ScopedAnimation/Documentation.docc/GettingStarted.md)・[組み合わせ方](Sources/ScopedAnimation/Documentation.docc/Composition.md) |
+| トランザクションが届く仕組み | [仕組み](Sources/ScopedAnimation/Documentation.docc/HowItWorks.md) |
+| 製品契約・内部構造・ロードマップ | [設計](HANDOFF.md) |
+| 開発環境・テスト・文書の管理 | [貢献ガイド](CONTRIBUTING.md) |
+| バージョンの準備と公開 | [リリース手順](docs/releasing.md) |
+| 実行環境・実出力・検証の限界 | [検証記録](docs/validation.md) |
+| 報告と参加のルール | [セキュリティ方針](SECURITY.md)・[行動規範](CODE_OF_CONDUCT.md) |
 
-Xcode で DocC をビルドできます。
+DocC は Xcode でビルドします。
 
 ```sh
 xcodebuild docbuild -scheme ScopedAnimation -destination 'generic/platform=iOS'
 ```
 
-`swift-docc-plugin` は不要です。
-
 ## ライセンス
 
-MIT。[LICENSE](LICENSE) を参照してください。
+[MIT](LICENSE)
