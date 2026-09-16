@@ -46,7 +46,7 @@ In `Package.swift`, declare the dependency and add the `ScopedAnimation` product
 to your target:
 
 ```swift
-.package(url: "https://github.com/9uiLe/swift-scoped-animation.git", from: "0.2.1")
+.package(url: "https://github.com/9uiLe/swift-scoped-animation.git", from: "0.2.2")
 ```
 
 ## Animate a value change

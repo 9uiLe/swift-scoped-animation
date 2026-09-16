@@ -42,7 +42,7 @@ https://github.com/9uiLe/swift-scoped-animation.git
 `Package.swift` では依存を宣言し、対象ターゲットに `ScopedAnimation` プロダクトを追加します。
 
 ```swift
-.package(url: "https://github.com/9uiLe/swift-scoped-animation.git", from: "0.2.1")
+.package(url: "https://github.com/9uiLe/swift-scoped-animation.git", from: "0.2.2")
 ```
 
 ## 値の変更でアニメーションさせる
