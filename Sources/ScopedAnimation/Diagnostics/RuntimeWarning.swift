@@ -142,47 +142,42 @@
         var title: String {
             switch self {
             case .unscopedAnimation:
-                "Unscoped animation transaction"
+                "スコープ未指定のアニメーショントランザクション"
             case .barrierLeak:
-                "Animation barrier stripped an unscoped transaction"
+                "バリアがスコープ未指定のアニメーションを除去しました"
             case .crossScopeAnimationStrip:
-                "AnimationScope boundary stripped another scope's animation"
+                "AnimationScope の境界が別スコープのアニメーションを除去しました"
             case .multiTriggerConflict:
-                "AnimationScope multi-trigger conflict"
+                "AnimationScope の複数トリガーが競合しました"
             }
         }
 
-        // A transaction hook can run for every descendant. Formatting before debounce
-        // would repeat reflection and string allocation even when the warning is suppressed.
+        // フックは子孫ごとに動くため、デバウンス前に整形すると、警告を抑制する場合も
+        // リフレクションと文字列確保を繰り返すことになります。
         var message: String {
             switch self {
             case .unscopedAnimation:
                 return
-                    "ScopedAnimation detected an animation transaction without an AnimationScope stamp at "
-                    + "detectAnimationLeaks. Move the animation into AnimationScope or add animationBarrier() "
-                    + "near the leaking subtree."
+                    "detectAnimationLeaks が AnimationScope のスタンプのないアニメーションを検出しました。"
+                    + "アニメーションを AnimationScope 内へ移すか、対象のサブツリー付近に animationBarrier() を追加してください。"
             case .barrierLeak:
                 return
-                    "animationBarrier() stripped an animation transaction without an AnimationScope stamp. "
-                    + "Move the animation into AnimationScope or pass warnsOnLeaks: false when this "
-                    + "barrier intentionally silences legacy animation."
+                    "animationBarrier() が AnimationScope のスタンプのないアニメーションを除去しました。"
+                    + "AnimationScope 内へ移すか、既存のアニメーションを意図的に遮断する場合は warnsOnLeaks: false を指定してください。"
             case .crossScopeAnimationStrip(let strippingScopeName, let strippedScopeName):
                 let strippingScope = Self.scopeDisplayName(strippingScopeName)
                 let strippedScope = Self.scopeDisplayName(strippedScopeName)
-                return "AnimationScope \(strippingScope) stripped a stamped animation from "
-                    + "AnimationScope \(strippedScope). Nested AnimationScope boundaries block ancestor "
-                    + "scope animations. Use sibling scopes for separate subtrees, or "
-                    + "`AnimationScope(name:triggers:)` when multiple `(animation, value)` pairs affect "
-                    + "the same subtree."
+                return "AnimationScope \(strippingScope) が \(strippedScope) のスタンプ付きアニメーションを除去しました。"
+                    + "入れ子の境界は祖先のアニメーションを遮断します。別のサブツリーには兄弟スコープを、"
+                    + "同じサブツリーの複数の (animation, value) 条件には AnimationScope(name:triggers:) を使ってください。"
             case .multiTriggerConflict(let scopeName, let resolution):
                 let scope = Self.scopeDisplayName(scopeName)
                 let adoptedDescription = Self.triggerDescription(resolution.winner)
                 let rejectedDescriptions = resolution.rejected
                     .map(Self.triggerDescription)
                     .joined(separator: ", ")
-                return "AnimationScope \(scope) resolved a simultaneous trigger change in favor of "
-                    + "\(adoptedDescription). Ignored trigger(s): \(rejectedDescriptions). Put the "
-                    + "primary motion first in the `triggers` array."
+                return "AnimationScope \(scope) の同時変更で \(adoptedDescription) を採用しました。"
+                    + "不採用のトリガー: \(rejectedDescriptions)。優先する動きを triggers 配列の先頭に置いてください。"
             }
         }
 
@@ -194,7 +189,7 @@
 
         private static func scopeDisplayName(_ name: String?) -> String {
             guard let name, !name.isEmpty else {
-                return "unnamed scope"
+                return "名前なしスコープ"
             }
             return "\"\(name)\""
         }

@@ -4,9 +4,9 @@ import Testing
 
 @testable import ScopedAnimation
 
-@Suite("Animation scope stamp identity")
+@Suite("スタンプの同一性")
 struct AnimationScopeStampTests {
-    @Test("Name and animation changes preserve scope identity")
+    @Test("名前とアニメーションの変更はスコープの同一性を保つ")
     func payloadChangesPreserveIdentity() {
         let id = UUID()
         let original = AnimationScopeStamp(
@@ -24,7 +24,7 @@ struct AnimationScopeStampTests {
         #expect(Set([original, updated]).count == 1)
     }
 
-    @Test("Different scope identifiers remain distinct with equal payloads")
+    @Test("内容が等しくても異なるスコープ ID は区別する")
     func differentIdentifiersRemainDistinct() {
         let first = AnimationScopeStamp(name: "Card", animation: .smooth)
         let second = AnimationScopeStamp(name: "Card", animation: .smooth)

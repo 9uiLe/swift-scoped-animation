@@ -1,208 +1,191 @@
-# Release design and operations
+# リリースの設計と運用
 
-ScopedAnimation is a source-only Swift package published from
-`9uiLe/swift-scoped-animation`. The owner, `9uiLe`, chooses the version and
-publishes a commit validated by GitHub Actions. Release credentials stay in the
-owner's local GitHub CLI authentication.
+ScopedAnimation は、`9uiLe/swift-scoped-animation` の Git タグからソースを配布する Swift パッケージです。
+所有者 `9uiLe` が安定版のバージョンを選び、文書を PR で確定し、CI で検証したコミットをローカル認証で公開します。
 
-## Release contract
+## 成果物と責務
 
-A release consists of an annotated `vX.Y.Z` Git tag and a GitHub Release. The tag
-points directly to the source commit consumed by SwiftPM. The Release uses
-`X.Y.Z` as its title and the versioned CHANGELOG section as its body. No binary
-assets are attached.
-
-**Creating the remote tag makes the version available to SwiftPM.** All
-publication prerequisites are checked before tag creation. The GitHub Release
-is created as a draft, checked against the tag, and then published.
-
-| Responsibility | Owner |
+| 項目 | 契約 |
 | --- | --- |
-| Choose a stable version, review and merge the release PR, initiate publication | Repository owner `9uiLe` |
-| Prepare versioned documents and verify publication conditions | Local `scripts/release.py` |
-| Run package and release-tooling checks | Read-only GitHub Actions |
-| Restrict writes and lock published artifacts | GitHub repository protection and Immutable releases |
+| バージョン | 数値の `X.Y.Z`。API 互換性に応じて所有者が選択 |
+| Git タグ | ソースコミットを直接指す注釈付き `vX.Y.Z` |
+| GitHub Release | タイトルは `X.Y.Z`、本文は CHANGELOG の該当バージョンの節、バイナリ添付なし |
+| 公開後の保護 | GitHub の Immutable releases による固定。ツールはタグを移動・削除・置換しない |
+| 準備と公開 | 所有者のローカル `scripts/release.py` と GitHub CLI 認証 |
+| CI | 読み取り権限の GitHub Actions。公開用の認証情報は持たない |
 
-The package continues to use `v`-prefixed tags. Command arguments and the README
-dependency use the numeric `X.Y.Z` version. Prerelease suffixes, build metadata,
-leading zeroes, and a `v` prefix in command arguments are rejected. Version
-selection is manual and should reflect API compatibility.
+**リモートタグの作成時点から、SwiftPM はそのバージョンを取得できます。**
+公開条件をすべて確認してからタグを作ります。GitHub Release は下書きで作成し、タグとの整合性を確認して公開します。
 
-## Commands
+コマンド引数と README には `v` なしの数値バージョンを指定します。
+プレリリース、ビルドメタデータ、先頭ゼロ、引数の `v` 接頭辞は受け付けません。
 
-Run from a clean checkout with Python 3.10+, Git, and a current GitHub CLI.
+## 前提条件
+
+Python 3.10+、Git、現在の GitHub CLI を用意し、追跡・未追跡の変更がない作業ツリーで実行します。
+所有者の認証を選択してください。
 
 ```sh
 gh auth login --hostname github.com
 gh auth switch --hostname github.com --user 9uiLe
 ```
 
-The script checks the actual authenticated user through the API. Environment
-tokens such as `GH_TOKEN` take precedence over saved CLI authentication.
-The `origin` URL must identify the upstream repository using HTTPS or its
-`git@github.com:9uiLe/swift-scoped-animation.git` SSH URL.
+ツールは API で実際の認証ユーザーを確認します。`GH_TOKEN` などの環境変数は保存済み CLI 認証より優先されます。
+`origin` は上流の HTTPS URL または `git@github.com:9uiLe/swift-scoped-animation.git` を指定します。
+fetch/push は GitHub CLI と同じ認証を使う HTTPS 経由のため、origin が SSH でも SSH 鍵は不要です。
+GitHub Actions 内での実行は拒否します。
 
-Remote fetch and push operations use HTTPS with the same GitHub CLI credential
-helper. SSH keys are not required even when `origin` uses SSH. Commands reject
-execution inside GitHub Actions.
+### GitHub の設定
 
-Replace `X.Y.Z` below with the selected stable version:
+所有者が次を設定します。ローカルスクリプトは権限や保護規則を編集しません。
 
-| Command | Effect |
+- **Immutable releases**：公開前に有効化する。適用対象は有効化後の公開。
+- **master の保護**：PR と `build-test-docs`・`Release tooling checks` の成功を要求し、削除・force-push を保護する。
+- **タグ保護**：`v*` の作成・更新・削除を管理者に制限する。公開したタグの移動は禁止。
+- **Actions**：既定トークンを読み取り専用にし、PR 承認を無効にする。
+  ワークフローには `contents: read`、checkout の完全 SHA 固定、`persist-credentials: false` を指定する。
+- **認証情報**：公開用トークンや署名用認証情報を Actions に保存しない。
+
+アクセス制御は GitHub の設定が担い、ツールは公開対象の整合性を検証します。
+管理者がマージ規則を回避した場合も、公開時には対象コミットの CI 成功を要求します。
+軽量タグや可変 Release を、ツールが注釈付きタグや不変 Release に変換することはありません。
+
+## コマンドの役割
+
+`X.Y.Z` は選んだ安定版バージョンに置き換えます。
+
+| コマンド | 動作 |
 | --- | --- |
-| `./scripts/release.py prepare X.Y.Z --dry-run` | Fetch source and tags, validate preparation, and print the selected source SHA and release notes. |
-| `./scripts/release.py prepare X.Y.Z` | Create and push `release/X.Y.Z` with versioned documents, then open a PR targeting `master`. |
-| `./scripts/release.py check X.Y.Z` | Validate publication and print the source SHA, qualifying CI URL, and release notes. |
-| `./scripts/release.py publish X.Y.Z` | Repeat validation, create or resume the tag and draft, publish, and verify the result. |
+| `./scripts/release.py prepare X.Y.Z --dry-run` | ソースとタグを取得し、準備条件を確認して SHA とリリースノートを表示 |
+| `./scripts/release.py prepare X.Y.Z` | `release/X.Y.Z` で文書を更新・push し、master 向け PR を作成 |
+| `./scripts/release.py check X.Y.Z` | 公開条件を検証し、SHA・該当 CI の URL・ノートを表示 |
+| `./scripts/release.py publish X.Y.Z` | 公開条件を再検証し、タグと下書きを作成または再開して、公開後の状態を確認 |
 
-`prepare --dry-run` and `check` update local fetched refs but do not edit working
-files, create working branches, or write remote state. `scripts/release.sh`
-forwards these subcommands to Python. The command without a subcommand is
-rejected; there is no command that versions documents and publishes in one step.
+`prepare --dry-run` と `check` は取得済み参照を更新します。作業ファイル・作業ブランチ・リモート状態は変更しません。
+`scripts/release.sh` は同じサブコマンドを Python に渡します。サブコマンドの指定は必須です。
+準備と公開はそれぞれ独立した操作です。
 
-## 1. Prepare a release PR
+## 1. リリース文書を準備する
 
-Maintain user-facing entries under `## Unreleased` in `CHANGELOG.md`. Describe
-breaking changes and required migration steps explicitly. Release notes are
-copied to GitHub, so use absolute URLs for links in those entries.
+`CHANGELOG.md` の `## Unreleased` に、利用者向けの変更を記録します。
+破壊的変更には移行手順を含めます。ノートは GitHub Release に掲載するため、リンクには絶対 URL を使います。
+解析用見出しは `## Unreleased` と `## X.Y.Z - YYYY-MM-DD`、本文と小見出しは日本語です。
 
-Preparation reads the fetched `origin/master` snapshot, regardless of the
-current working branch. It requires:
+```sh
+./scripts/release.py prepare X.Y.Z --dry-run
+./scripts/release.py prepare X.Y.Z
+```
 
-- a version newer than all recognized stable tags and the latest CHANGELOG release;
-- exactly one leading Unreleased section with release entries;
-- valid dated release headings in descending, unique version order;
-- exactly one ScopedAnimation dependency in README matching the latest released
-  CHANGELOG version; and
-- no existing tag, Release, or local/remote `release/X.Y.Z` branch.
+準備対象は、作業中のブランチによらず取得した `origin/master` です。
 
-It leaves an empty Unreleased section, inserts `## X.Y.Z - YYYY-MM-DD`, updates
-the README dependency, commits those two documents on the selected source SHA,
-pushes the release branch, and creates the PR.
-
-Preparation does not modify Swift sources, package requirements, or old release
-sections. It neither chooses the version automatically nor publishes it.
-
-## 2. Merge and wait for commit CI
-
-Review the release notes and installation version, then merge the release PR.
-The workflow runs for every `master` push, including documentation-only changes.
-
-Publication requires both `build-test-docs` and `Release tooling checks` to
-succeed in the latest run attempt for the exact source commit. PR checks,
-manual workflow dispatches, older successful attempts, and another commit's
-successful run cannot substitute for that push run.
-
-If the latest attempt fails or is cancelled, fix the cause and rerun the same CI
-run or merge a corrected release PR. A successful retry can qualify.
-
-## 3. Check and publish
-
-Run `check` to inspect the intended source and notes, then `publish`.
-Publication repeats the checks rather than reusing a saved plan.
-
-| Check | Requirement |
+| 検証対象 | 条件 |
 | --- | --- |
-| Account and repository | Actual user is `9uiLe`; upstream is public, uses `master`, and grants that user admin access. |
-| Working tree | No tracked or untracked changes. |
-| Artifact protection | Repository Immutable releases is enabled. |
-| Source | Full commit SHA contained in the fetched `master` history. |
-| Documents | Latest CHANGELOG release and README dependency match the requested version, notes contain entries, dates are valid, and Unreleased is empty. |
-| CI run | Active `ci.yml`, upstream repository, `push` event, `master` branch, exact SHA, and latest run/attempt all match. |
-| CI jobs | Each required job appears once, succeeded, and has the same source SHA. |
-| Existing tag | Annotated `vX.Y.Z` tag pointing directly to a commit; nested or lightweight tags are rejected. |
-| Existing Release | Tag, source SHA, title, owner, and notes match; no prerelease flag or attached assets. Published releases must be immutable. |
+| 選択したバージョン | 認識できるすべての安定版タグと、CHANGELOG の最新バージョンより新しい |
+| Unreleased | 先頭に 1 つだけ存在し、変更項目がある |
+| リリース見出し | 正しい日付を持ち、バージョンが重複せず新しい順に並ぶ |
+| README | `README.md` と `README.en.md` に導入宣言がそれぞれ 1 つあり、最新 CHANGELOG のバージョンと一致 |
+| 作成先 | 対象タグ、Release、ローカル・リモートの `release/X.Y.Z` ブランチが存在しない |
 
-For a new tag, the source is the fetched `origin/master` tip. The script rechecks
-that remote `master` has not changed before creating the tag. For an existing
-tag, its commit is the source, even if `master` has advanced.
+準備コマンドは空の Unreleased と日付付きリリース節を作り、両 README の導入バージョンを更新します。
+選んだソース SHA を親として 3 ファイルを同じコミットに収め、ブランチを push して PR を作成します。
+変更対象はリリース文書です。バージョンの選択と PR のマージは所有者が行います。
 
-An unpublished version must be newer than other stable tags. Both prefixed and
-unprefixed stable tags participate in this check so an alias such as `0.3.0`
-cannot silently coexist with a new `v0.3.0`.
+## 2. 準備 PR をマージする
 
-The tag is checked after creation and before and after publication. A draft must
-match the plan before it is published. The final Release must be published and
-immutable. On success the command prints its URL.
+ノート、日付、両 README のバージョンを確認して master へマージします。
+文書だけの更新も含め、master のすべての push が CI の対象です。
 
-## Recovery
+公開には、**対象ソース SHA の master push CI** が必要です。
+最新の実行・再試行で、必須ジョブ `build-test-docs` と `Release tooling checks` の両方が成功している必要があります。
+PR のチェック、手動実行、別コミットの結果は公開条件を満たしません。
 
-### Publication
+失敗・キャンセル時は原因を解消して CI を再実行するか、修正 PR をマージします。
+成功した再試行は公開条件を満たします。
 
-Rerun `publish` with the same version after resolving the reported error.
+## 3. ソースを検証して公開する
 
-| Remote state | Behavior |
+```sh
+./scripts/release.py check X.Y.Z
+./scripts/release.py publish X.Y.Z
+```
+
+`check` で公開するコミットとノートを確認します。`publish` は、その確認結果に依存せず条件を再検証します。
+
+| 検証対象 | 条件 |
 | --- | --- |
-| No tag or Release | Validate the current master snapshot and start publication. |
-| Matching annotated tag | Validate that tag's commit and CI, then create a draft. |
-| Matching draft | Validate tag, source, metadata, and CI, then publish. |
-| Matching published immutable Release | Verify its source and metadata, print its URL, and perform no writes. |
-| Conflicting tag or Release | Stop for manual inspection. |
+| アカウントと上流 | 認証ユーザーが `9uiLe`、公開リポジトリで master を使用し、管理者権限がある |
+| 作業ツリー | 追跡・未追跡の変更がない |
+| 成果物の保護 | Immutable releases が有効 |
+| ソース | 取得した master の履歴に含まれる完全なコミット SHA |
+| 文書 | 最新 CHANGELOG と両 README が対象バージョンに一致し、ノートと正しい日付があり、Unreleased が空 |
+| CI 実行 | 有効な `ci.yml`、上流リポジトリ、push イベント、master、対象 SHA、最新の実行・再試行が一致 |
+| CI ジョブ | 各必須ジョブが 1 つだけあり、成功し、ソース SHA も一致 |
+| タグが存在する場合 | コミットを直接指す注釈付き `vX.Y.Z`。軽量タグ・入れ子のタグは拒否 |
+| Release が存在する場合 | タグ・SHA・タイトル・所有者・ノートが一致し、プレリリースでも添付付きでもない。公開済みなら不変 |
 
-A created tag is never deleted, overwritten, or moved by the script. If the tag
-changes or disappears during validation, publication stops. An orphaned
-annotated-tag object without a ref does not expose a package version; retrying
-can create the required ref through a new validated attempt.
+新規タグの対象は取得した `origin/master` の先端です。作成直前にリモート master の一致を再確認します。
+タグが存在する場合は、master が進んでいてもそのタグのコミットを使います。
 
-A published Release does not need its old CI logs to remain available for
-idempotent inspection. Its tag, committed documents, author, title, notes, and
-immutable state are still checked.
+未公開のバージョンは、他の安定版タグより新しい必要があります。
+比較には `v` あり・なしのタグを含み、`0.3.0` と `v0.3.0` のような別名での重複を拒否します。
 
-### Preparation
+タグを作成後・Release 公開前・公開後に確認し、下書きも公開前に内容を照合します。
+公開済みかつ不変な最終状態を確認すると、Release の URL を表示します。
 
-If preparation stops after creating its branch, inspect
-`git log release/X.Y.Z`, the document diff, and
-`gh pr list --head release/X.Y.Z`. Complete any missing push or PR creation
-from that branch. Rerunning `prepare` refuses to replace existing branches.
+## 中断からの再開
 
-If `master` gains new Unreleased entries after release preparation, publish
-stops. Include those changes in the release documents through a reviewed PR or
-complete a release at an already-created, validated tag.
+### 公開状態ごとの動作
 
-## Repository settings
+原因を解消し、同じバージョンで `publish` を実行します。
 
-The owner configures these settings separately from the release commands:
+| リモート状態 | 動作 |
+| --- | --- |
+| タグも Release もない | master の先端を検証し、タグ作成から開始 |
+| 一致する注釈付きタグがある | タグのコミットと CI を検証し、下書きを作成 |
+| 一致する下書きがある | タグ・ソース・内容・CI を検証して公開 |
+| 一致する公開済みの不変な Release がある | ソースと内容を検証し、書き込みなしで URL を表示 |
+| 不一致のタグまたは Release がある | 停止して手動確認を要求 |
 
-- **Immutable releases:** enable it before publishing. It applies to newly
-  published releases; it does not retroactively make older releases immutable.
-- **Master protection:** require PRs and both `build-test-docs` and
-  `Release tooling checks`. Keep the existing deletion and force-push protection.
-  The publication script independently enforces successful commit CI even when
-  an admin bypasses merge rules.
-- **Tag protection:** restrict creation, updates, and deletion of `v*` tags to
-  the repository admin. Never move a published version to a different commit.
-- **Actions:** use read-only default token permissions and disable PR approvals.
-  The workflow declares `contents: read`, pins checkout by full SHA, and sets
-  `persist-credentials: false`.
-- **Credentials:** no release token or signing credential is stored in Actions.
+公開済み Release の照合には古い CI ログの保存を要求しません。
+タグ、コミット済み文書、作成者、タイトル、ノート、不変性を検証します。
 
-These permissions belong to GitHub settings; a local script is not a substitute
-for access control. The script does not edit repository rules or permission
-settings. Existing releases made with lightweight tags or mutable publication
-are historical artifacts and are not adopted or rewritten by these commands.
+検証中にタグが変わったり消えたりした場合は停止します。ツールはタグを削除・上書き・移動しません。
+参照のない注釈付きタグオブジェクトだけではバージョンは公開されず、再検証後の試行で必要な参照を作成できます。
 
-## Development and verification
+### 準備が中断した場合
+
+ブランチ作成後の状態は、次で確認します。
+
+```sh
+git log release/X.Y.Z
+git diff origin/master...release/X.Y.Z -- CHANGELOG.md README.md README.en.md
+gh pr list --head release/X.Y.Z
+```
+
+文書の内容を確認し、同じブランチから不足する push や PR 作成を完了します。
+`prepare` の再実行は、存在するブランチを置換しません。
+
+準備後に master の Unreleased に変更が入ると、その master からの公開は停止します。
+PR でリリース文書に含めるか、対象バージョンの検証済みタグがある場合はそのコミットから公開を完了します。
+
+## リリースツールの検証
 
 ```sh
 python3 -m unittest discover -s scripts/tests -v
 bash -n scripts/release.sh
 ```
 
-Tests use temporary Git repositories and simulated GitHub responses. They cover
-document preparation, exact CI matching, rejected publication, tag integrity,
-interrupted operations, idempotent publication, pagination, and PR creation.
-They require neither network access nor credentials.
+テストは一時 Git リポジトリと模擬 GitHub 応答を使い、ネットワークや認証を必要としません。
+両言語の文書更新、CI の照合、拒否条件、タグ整合性、中断・再実行、ページネーション、PR 作成を検証します。
 
-The `release-tooling` CI job runs these tests on Ubuntu 24.04. The existing
-macOS job retains Swift builds/tests, iOS Simulator tests, formatting, RELEASE
-diagnostic auditing, DocC, and example validation. See
-[CONTRIBUTING.md](../CONTRIBUTING.md) for the complete check commands.
+`Release tooling checks` は Ubuntu 24.04 で実行します。
+`build-test-docs` は macOS で Swift ビルド・macOS/iOS テスト・フォーマット・RELEASE 診断監査・DocC・サンプルを検証します。
+開発時の全コマンドは[貢献ガイド](../CONTRIBUTING.md)を参照してください。
 
-## References
+## 外部仕様
 
-- [Owner-authenticated release design in swift-app-macros PR #8](https://github.com/9uiLe/swift-app-macros/pull/8)
-- [GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
-- [GitHub release API](https://docs.github.com/en/rest/releases/releases)
-- [GitHub CLI release creation](https://cli.github.com/manual/gh_release_create)
-- [GitHub CLI environment variables](https://cli.github.com/manual/gh_help_environment)
-- [GitHub runner image: Ubuntu 24.04](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)
+- [GitHub Immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
+- [GitHub Release API](https://docs.github.com/en/rest/releases/releases)
+- [GitHub CLI による Release 作成](https://cli.github.com/manual/gh_release_create)
+- [GitHub CLI の環境変数](https://cli.github.com/manual/gh_help_environment)
+- [Ubuntu 24.04 ランナー](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)

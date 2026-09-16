@@ -1,16 +1,12 @@
 # ScopedAnimation
 
-Declare structural boundaries for SwiftUI animation.
+SwiftUI アニメーションの所有者と境界をビューの構造で宣言します。
 
 ## Overview
 
-ScopedAnimation makes animation ownership visible through three operations:
-
-- boundaries remove incoming animation;
-- scopes supply animation with an ownership stamp; and
-- DEBUG tools report unstamped transactions and draw scope outlines.
-
-Use a value-driven scope to animate a subtree when a value changes:
+SwiftUI は、状態変更に伴うアニメーションをトランザクションでビューへ伝えます。
+ScopedAnimation の境界は外からのアニメーションを取り除き、スコープは自身が所有するアニメーションを与えます。
+所有者を示す内部情報をスタンプと呼びます。DEBUG 診断はスタンプのないアニメーションを検出し、スコープの境界を表示します。
 
 ```swift
 AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
@@ -18,24 +14,25 @@ AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
 }
 ```
 
-Use multiple triggers when several values control the same subtree, or a proxy
-when an explicit action determines which state changes animate.
+この例は `isExpanded` の変更で内容をアニメーションさせます。
+複数の条件にはトリガー配列、明示的な同期操作にはプロキシ、外からのアニメーションの除去にはバリアを使います。
 
-State changes still update every view that reads them. A proxy transaction can
-reach views outside declared boundaries, and a raw animation modifier can create
-animation below a detector. Scopes and barriers provide blocking and detection
-at declared locations.
+状態を読むすべてのビューは更新対象です。プロキシのトランザクションは境界のない領域にも届き、
+下流の SwiftUI 修飾子は独自のアニメーションを生成できます。遮断と検出の範囲は、境界や観測点の配置によって決まります。
+
+<doc:GettingStarted> で基本の使い方、<doc:Composition> で領域に合わせた配置を説明します。
+トランザクションの処理は <doc:HowItWorks>、コストと計測は <doc:PerformancePlaybook> を参照してください。
 
 ## Topics
 
-### Guides
+### ガイド
 
 - <doc:GettingStarted>
 - <doc:Composition>
 - <doc:HowItWorks>
 - <doc:PerformancePlaybook>
 
-### Scope API
+### スコープ API
 
 - ``AnimationScope``
 - ``AnimationTrigger``

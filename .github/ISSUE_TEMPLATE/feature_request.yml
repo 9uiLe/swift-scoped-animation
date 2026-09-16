@@ -1,38 +1,39 @@
-name: Feature request
-description: Suggest an enhancement or new capability
+name: 機能提案 / Feature request
+description: 改善や新しい機能を提案 / Suggest an enhancement
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        日本語・英語のどちらでも提案できます。Proposals in English are welcome; see [Contributing in English](https://github.com/9uiLe/swift-scoped-animation/blob/master/CONTRIBUTING.en.md).
   - type: textarea
     id: problem
     attributes:
-      label: Problem / motivation
-      description: What are you trying to do that ScopedAnimation does not support today?
+      label: 解決したい問題・動機 / Problem and motivation
+      description: 現在の ScopedAnimation ではできないことを説明してください。
     validations:
       required: true
-
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
+      label: 提案する解決策 / Proposed solution
       description: >
-        How might this work? Note that changes to public API, semantics, or the
-        roadmap must be reflected in HANDOFF.md — see CONTRIBUTING.md.
+        想定する動作を説明してください。公開 API・意味論・ロードマップの変更は
+        HANDOFF.md に反映する必要があります。CONTRIBUTING.md を参照してください。
     validations:
       required: true
-
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: Other approaches, workarounds, or prior art you have looked at.
-
+      label: 検討した代案 / Alternatives considered
+      description: 他の方法、回避策、参考にした実装を記載してください。
   - type: checkboxes
     id: scope-ack
     attributes:
-      label: Scope acknowledgement
+      label: 製品スコープの確認 / Product scope
       options:
         - label: >
-            This request fits the library's model of blocking + detection, not
-            total animation containment.
+            この提案はアニメーションの遮断と検出の範囲に収まります。
+            This proposal fits blocking and detection, without assuming complete containment.
           required: true

@@ -1,20 +1,18 @@
-# CLAUDE.md — instructions for Claude-based coding agents
+# CLAUDE.md — Claude 系コーディングエージェント向け指示
 
-Follow `AGENTS.md` in full. Read `HANDOFF.md` before changing code; it is the
-single source of truth for product scope, public API semantics, and roadmap.
+`AGENTS.md` に従ってください。コードを変更する前に `HANDOFF.md` を読んでください。
+製品スコープ、公開 API の意味論、ロードマップの唯一の設計基準です。
+日本語を基本言語とし、英語版を持つ文書と機械判定用の表記は `CONTRIBUTING.md` の言語方針に従います。
 
-## Put information where it will live longest
+## 情報を長く維持できる場所に置く
 
-- **Code owns How.** Make behavior legible through names, types, and structure.
-  Replace comments that narrate execution with clearer code.
-- **Tests own What.** Use test names and assertions as the executable statement
-  of required behavior.
-- **Commit history owns Why.** Record the motivation and change context in the
-  commit message, not only a description of edited files.
-- **Implementation comments own Why Not.** Keep a comment only when it explains
-  a hidden constraint, or why an apparently simpler alternative is unsafe or
-  incorrect. Do not use comments to restate what the code does.
+- **コードには実現方法を置く。** 名前・型・構造で挙動を読み取れるようにします。
+  処理を逐語的に説明するコメントは、明確なコードに置き換えます。
+- **テストには要求する挙動を置く。** テスト名とアサーションを、実行できる仕様にします。
+- **コミット履歴には変更理由を置く。** 編集したファイルの説明だけでなく、動機と背景を記録します。
+- **実装コメントには採用できない理由を置く。** 隠れた制約や、単純に見える代案が危険・不正確になる理由だけを残します。
+  コードの動作を言い換えないでください。
 
-DocC comments remain required user-facing API documentation and should describe
-the public contract and usage. Long-lived product and API decisions belong in
-`HANDOFF.md`.
+DocC コメントは、公開契約と使い方を示す API ドキュメントとして必要です。
+長く維持する製品・API の判断は `HANDOFF.md` に記載します。
+文書の責務と書き方は `CONTRIBUTING.md` の「情報の配置」に従い、設計・使用ガイドを会話や過去の PR に依存させません。

@@ -1,10 +1,9 @@
 import SwiftUI
 
 extension View {
-    /// Reports unscoped animation transactions that pass through this view in debug builds.
+    /// このビューを通るスコープ未指定のアニメーションを DEBUG ビルドで報告します。
     ///
-    /// Install the detector near a screen root, or around a suspicious subtree when tracking
-    /// an animation leak.
+    /// 画面ルート付近に配置します。リークを調べる場合は、疑わしいサブツリーにも配置してください。
     ///
     /// ```swift
     /// RootView()

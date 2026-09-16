@@ -1,7 +1,7 @@
 name: CI
 
-# Release publication requires push CI for the exact master commit, including
-# commits that only version README and CHANGELOG.
+# リリースには対象 master コミットの push CI が必要です。
+# README と CHANGELOG のバージョン更新だけでも実行します。
 on:
   pull_request:
   push:
@@ -12,8 +12,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
-# Least privilege: this workflow only reads the repository. Narrowing the
-# GITHUB_TOKEN here limits blast radius if a build step or action is compromised.
+# ビルド手順や Action が侵害された場合の影響を抑えるため、GITHUB_TOKEN は読み取り専用にします。
 permissions:
   contents: read
 
@@ -22,29 +21,28 @@ jobs:
     name: Release tooling checks
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out repository
+      - name: リポジトリを取得
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - name: Test release commands
+      - name: リリースコマンドを検証
         run: python3 -m unittest discover -s scripts/tests -v
 
   build-test-docs:
-    # Pinned: macos-latest can still resolve to macos-15 (default Xcode 16.4 /
-    # Swift 6.1), which cannot parse this package's swift-tools-version 6.2.
-    # macos-26 ships Xcode 26.x by default.
+    # macos-latest は macos-15（Xcode 16.4 / Swift 6.1）の場合があり、tools-version 6.2 を読めません。
+    # Xcode 26.x が標準の macos-26 に固定します。
     runs-on: macos-26
     steps:
-      - name: Check out repository
+      - name: リポジトリを取得
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - name: Show Xcode version
+      - name: Xcode のバージョンを表示
         run: xcodebuild -version
 
-      - name: Cache SwiftPM build
+      - name: SwiftPM ビルドをキャッシュ
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build
@@ -52,7 +50,7 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-
 
-      - name: Cache DerivedData
+      - name: DerivedData をキャッシュ
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: DerivedData
@@ -60,7 +58,7 @@ jobs:
           restore-keys: |
             deriveddata-${{ runner.os }}-
 
-      - name: Select available iPhone simulator
+      - name: 利用可能な iPhone シミュレーターを選択
         id: simulator
         shell: bash
         run: |
@@ -92,7 +90,7 @@ jobs:
                   iphones.append((version, -position, generation, device))
 
           if not iphones:
-              raise SystemExit("No available iPhone simulator found")
+              raise SystemExit("利用可能な iPhone シミュレーターがありません")
 
           latest_runtime = max(candidate[0] for candidate in iphones)
           latest_iphones = [candidate for candidate in iphones if candidate[0] == latest_runtime]
@@ -106,14 +104,14 @@ jobs:
           )"
           IFS=$'\t' read -r udid name <<< "${selection}"
           if [[ -z "${udid}" || -z "${name}" ]]; then
-            echo "No available iPhone simulator found" >&2
+            echo "利用可能な iPhone シミュレーターがありません" >&2
             xcrun simctl list devices available
             exit 1
           fi
           echo "udid=${udid}" >> "${GITHUB_OUTPUT}"
-          echo "Using simulator: ${name} (${udid})"
+          echo "使用するシミュレーター: ${name} (${udid})"
 
-      - name: Swift format
+      - name: Swift のフォーマットを検査
         run: |
           swift format lint --strict --configuration .swift-format \
             Package.swift \
@@ -124,13 +122,13 @@ jobs:
             Tests/ScopedAnimationTests/Support/*.swift \
             Examples/ScopedAnimationExample/ScopedAnimationExample/*.swift
 
-      - name: Build package
+      - name: パッケージをビルド
         run: swift build
 
-      - name: Test package on macOS
+      - name: macOS でテスト
         run: swift test
 
-      - name: Test package on iOS Simulator
+      - name: iOS シミュレーターでテスト
         run: |
           xcodebuild test \
             -scheme ScopedAnimation \
@@ -138,19 +136,19 @@ jobs:
             -derivedDataPath DerivedData \
             COMPILER_INDEX_STORE_ENABLE=NO
 
-      - name: Build package in release
+      - name: RELEASE でビルド
         run: swift build -c release
 
-      - name: Test package in release
+      - name: RELEASE でテスト
         run: swift test -c release
 
-      - name: Verify diagnostics compile out in release
+      - name: RELEASE の診断除去を監査
         run: bash scripts/verify-release-diagnostics.sh
 
-      - name: Build DocC documentation
+      - name: DocC をビルド
         run: xcodebuild docbuild -scheme ScopedAnimation -destination 'generic/platform=iOS' -derivedDataPath DerivedData COMPILER_INDEX_STORE_ENABLE=NO
 
-      - name: Build example app
+      - name: サンプルアプリをビルド
         run: |
           xcodebuild build \
             -project Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj \

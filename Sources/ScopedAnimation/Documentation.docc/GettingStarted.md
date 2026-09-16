@@ -1,10 +1,10 @@
-# Getting Started
+# 使い始める
 
-Declare an animation owner, then inspect its boundary.
+値の変更で動くスコープ、明示的な操作で動くスコープ、外からのアニメーションを遮断するバリアを使います。
 
-## Animate a Value Change
+## 値の変更をアニメーションさせる
 
-Use a value-driven scope when a value determines whether content should animate.
+値によって内容を動かすかどうかが決まる場合は、値駆動スコープを使います。
 
 ```swift
 import ScopedAnimation
@@ -15,15 +15,15 @@ struct ExpandableCard: View {
 
     var body: some View {
         VStack {
-            Button("Toggle details") {
+            Button("詳細を切り替え") {
                 isExpanded.toggle()
             }
 
             AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
                 VStack(alignment: .leading) {
-                    Text("Revenue")
+                    Text("売上")
                     if isExpanded {
-                        Text("Monthly details")
+                        Text("月次の詳細")
                             .transition(.opacity)
                     }
                 }
@@ -33,12 +33,13 @@ struct ExpandableCard: View {
 }
 ```
 
-The scope removes incoming ancestor animation. A change to `isExpanded` supplies
-the scope's animation to the content update.
+スコープは祖先からのアニメーションを取り除きます。
+`isExpanded` が変わると、内容の更新にスコープのアニメーションを与えます。
 
-## Choose Among Several Values
+## 複数の値から選ぶ
 
-Use multiple triggers when one subtree has several animation conditions.
+トリガーは値とアニメーションの組です。1 つのサブツリーに複数の条件がある場合は、優先する順に配列へ並べます。
+次の例では、盤面の選択集合 `selectedPoints` とヒント集合 `hintPoints` を監視します。
 
 ```swift
 AnimationScope(
@@ -52,18 +53,19 @@ AnimationScope(
 }
 ```
 
-The first changed trigger wins when values change together. DEBUG diagnostics
-report the ignored changes. Keep the trigger count and order stable; see
-<doc:HowItWorks> for dynamic-array behavior.
+同時に値が変わると、先頭に最も近い変更済みトリガーを採用します。DEBUG 診断は不採用の変更も報告します。
+名前やアニメーションだけの変更では動きません。意図した構成変更でなければ、要素数と順序を一定に保ちます。
+要素数・順序・型を動的に変える場合の契約は <doc:HowItWorks> を参照してください。
 
-## Animate an Explicit Action
+## 明示的な操作をアニメーションさせる
 
-Use a proxy when an action determines which state changes should animate.
+内容のクロージャが受け取るプロキシは、同期的な状態変更をスコープのアニメーションで実行します。
+次の例では `isOpen` が開閉状態、`DisclosureContent` がその状態を表示するビューです。
 
 ```swift
 AnimationScope(.snappy, name: "Disclosure") { scope in
     VStack {
-        Button("Toggle") {
+        Button("切り替え") {
             scope.animate {
                 isOpen.toggle()
             }
@@ -73,7 +75,7 @@ AnimationScope(.snappy, name: "Disclosure") { scope in
 }
 ```
 
-Override the default animation for one synchronous action:
+1 回の同期操作だけ、既定のアニメーションを上書きできます。
 
 ```swift
 scope.animate(.spring(duration: 0.45)) {
@@ -81,21 +83,21 @@ scope.animate(.spring(duration: 0.45)) {
 }
 ```
 
-The proxy stamps a transaction that can reach other views reading the changed
-state. Those regions need their own scope or barrier to reject its animation.
+プロキシはトランザクションに、所有者を示す内部情報であるスタンプを付けます。変更した状態を読む他のビューにも届くため、
+その領域でアニメーションを拒否するには、別のスコープかバリアが必要です。
 
-## Block Incoming Animation
+## 外からのアニメーションを遮断する
 
 ```swift
-LegacyDashboard()
+StatusPanel()
     .animationBarrier()
 ```
 
-A barrier strips incoming animation while retaining stamps for descendant scopes.
-It also reports unstamped incoming animation in DEBUG. Silence that warning for
-intentional legacy traffic with `animationBarrier(warnsOnLeaks: false)`.
+バリアは外からのアニメーションを取り除き、子孫のためにスタンプを保持します。
+DEBUG ではスタンプのない入力も報告します。`animationBarrier(warnsOnLeaks: false)` は、この警告だけを抑制します。
+バリアはレイアウト領域を確保せず、下流の SwiftUI 修飾子が独自にアニメーションを生成することも妨げません。
 
-## Inspect the Screen
+## 画面を確認する
 
 ```swift
 RootView()
@@ -103,10 +105,8 @@ RootView()
     .animationScopeDebugOverlay()
 ```
 
-The detector reports unstamped animation passing through that point. The overlay
-shows scope bounds and names. Both compile out of RELEASE builds.
+検出器は、その点を通過するスタンプなしアニメーションを報告します。
+オーバーレイはスコープの境界と名前を表示します。どちらも RELEASE から診断実装が除去されます。
 
-A root detector cannot see raw value animation generated below it. Put a detector
-downstream of a suspicious source when investigating that case. Continue with
-<doc:Composition> for ownership patterns and <doc:PerformancePlaybook> for cost
-and profiling guidance.
+ルートの検出器には、下で生成された直接の値アニメーションは見えません。その場合は発生源の下流に配置します。
+所有者の配置は <doc:Composition>、コストと計測方法は <doc:PerformancePlaybook> を参照してください。

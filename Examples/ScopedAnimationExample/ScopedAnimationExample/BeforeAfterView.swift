@@ -11,7 +11,7 @@ struct BeforeAfterView: View {
             .padding()
         }
         .background(Color(.systemGroupedBackground))
-        .navigationTitle("Before / After")
+        .navigationTitle("導入前と導入後")
     }
 }
 
@@ -22,18 +22,18 @@ private enum ComparisonMode {
     var title: String {
         switch self {
         case .before:
-            "Before"
+            "導入前"
         case .after:
-            "After"
+            "導入後"
         }
     }
 
     var actionTitle: String {
         switch self {
         case .before:
-            "Raw update"
+            "直接更新"
         case .after:
-            "Scoped update"
+            "スコープで更新"
         }
     }
 }
@@ -60,7 +60,7 @@ private struct ComparisonPanel: View {
                 if mode == .before {
                     AnimatedCard(expanded: expanded)
                 } else {
-                    AnimationScope(.easeInOut(duration: 0.55), name: "Card") { scope in
+                    AnimationScope(.easeInOut(duration: 0.55), name: "カード") { scope in
                         AnimatedCard(expanded: expanded)
                             .onAppear {
                                 scopeProxy = scope
@@ -128,7 +128,7 @@ private struct AnimatedCard: View {
                 Image(systemName: expanded ? "bolt.fill" : "bolt")
                     .font(.title2)
                     .foregroundStyle(.yellow, .orange)
-                Text("Pipeline")
+                Text("処理状況")
                     .font(.headline)
             }
 
@@ -152,7 +152,7 @@ private struct AmbientStatus: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Status")
+            Text("状態")
                 .font(.headline)
             HStack(spacing: 6) {
                 ForEach(0..<4) { index in
@@ -161,7 +161,7 @@ private struct AmbientStatus: View {
                         .frame(width: 12, height: expanded ? 42 : 24)
                 }
             }
-            Text(expanded ? "Active" : "Idle")
+            Text(expanded ? "稼働中" : "待機中")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

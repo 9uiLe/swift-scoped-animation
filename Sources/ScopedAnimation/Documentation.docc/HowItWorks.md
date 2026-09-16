@@ -1,45 +1,38 @@
-# How It Works
+# トランザクションと所有者
 
-Follow a transaction from its animation source through scope boundaries.
+境界、スタンプ、値の解決が、アニメーションの適用範囲を決めます。
 
-## Transactions and Stamps
+## 所有者を表すスタンプ
 
-SwiftUI carries animation information in a `Transaction`. ScopedAnimation adds
-an internal stamp containing a stable scope ID, an optional display name, and the
-animation selected for that transaction.
+SwiftUI は `Transaction` でアニメーション情報をビューへ伝えます。
+ScopedAnimation のスコープは、そのトランザクションに所有者を示す内部スタンプを付けます。
 
-The ID determines ownership. A name helps diagnostics identify the scope, and an
-animation payload lets a matching boundary restore the intended animation.
-Changing the name or payload does not replace the scope's identity.
+スタンプは安定したスコープ ID、任意の表示名、アニメーションを持ちます。
+ID は所有者の同一性、名前は診断での識別に使います。名前やアニメーションを変えても ID は変わりません。
+アニメーションをスタンプにも保持することで、祖先が除去した後に所有者の境界で復元できます。
 
-## Boundary Processing
-
-Every scope boundary:
-
-1. removes `transaction.animation`;
-2. preserves the stamp for descendants; and
-3. restores the stamp's animation only when its ID matches this scope and
-   `transaction.disablesAnimations` is false.
-
-A standalone `animationBarrier()` performs the first two steps and never restores
-animation. Both use the same boundary implementation.
+## 境界から内容への流れ
 
 ```text
-Incoming transaction
+外からのトランザクション
     ↓
-Boundary: strip, preserve stamp, restore matching animation when enabled
+境界: アニメーションを除去し、スタンプを保持。一致する所有者だけ復元
     ↓
-Value resolver: supply local animation and stamp when a trigger changes
+値リゾルバー: 条件を満たす値変更のアニメーションとスタンプを適用
     ↓
-Content and any descendant boundaries
+内容と子孫の境界
 ```
 
-The boundary is outside the value resolver in the modifier chain, so incoming
-animation is processed before a local value change supplies its animation.
+スコープ境界は、外からの `transaction.animation` を所有者によらず取り除きます。
+スタンプは保持し、自身の ID と一致して `transaction.disablesAnimations` が false の場合だけ復元します。
+単独の `animationBarrier()` は除去とスタンプの保持を行います。
 
-## Value-Driven Animation
+値リゾルバーは監視値からアニメーションを選ぶ処理です。境界の内側に配置し、外からのアニメーションを処理した後で適用します。
+`disablesAnimations` が true なら、値駆動のアニメーションとスタンプも適用しません。
 
-A value-driven scope pairs each observed value with an animation:
+## 値トリガーの選択
+
+トリガーは `Equatable` な値とアニメーションの組です。トリガー配列をスナップショットとして保持し、位置ごとに比較します。
 
 ```swift
 AnimationScope(
@@ -53,98 +46,86 @@ AnimationScope(
 }
 ```
 
-The resolver compares snapshots by array position and selects the first changed
-trigger. That one resolution supplies the transaction animation, scope stamp,
-and DEBUG conflict report.
+最初の変更済みトリガーを選び、1 つの解決結果からアニメーション、所有者スタンプ、DEBUG の競合報告を作ります。
+すべてのトリガーが 1 つのスコープを共有するため、サブツリー全体に同じ選択を適用します。
 
-The same modifier structure handles zero, one, or many triggers.
-`.transaction(value:)` gates delivery by snapshot value. History retains a
-pending resolution across repeated body evaluations so an early evaluation does
-not consume the animation before SwiftUI delivers its transaction.
-
-| Change | Behavior |
+| 更新 | 挙動 |
 | --- | --- |
-| Initial mount | Establish a baseline. |
-| One or more values change | Select the first changed trigger and stamp the local update. |
-| Several values change | Report ignored changed triggers in DEBUG. |
-| Animation or name changes alone | No value-driven animation. The next value change uses current configuration. |
-| Trigger count changes | Establish a baseline without a trigger animation or conflict warning; preserve content identity. |
-| Trigger order changes | Compare values by their new positions and use those positions for priority. |
-| Value type changes | Treat the values as different, including `Int` versus `Optional<Int>`. |
-| Animations are disabled | Do not apply a value-driven resolution. |
+| 初回マウント | アニメーションなしで比較基準を設定 |
+| 値が変化 | 先頭に最も近い変更済みトリガーを採用 |
+| 複数の値が変化 | DEBUG で不採用の変更も報告 |
+| 値が等しいまま | 値駆動アニメーションを開始しない |
+| 名前やアニメーションだけが変化 | 開始しない。次の値変更で現在の設定を使う |
+| 要素数が変化 | アニメーション・競合警告なしで比較基準を再設定し、内容の同一性とローカル状態を維持 |
+| 順序が変化 | 新しい位置で比較し、その位置を優先順位にも使う |
+| 具象型が変化 | `Int` と `Optional<Int>` も含め、異なる値として扱う |
+| アニメーション無効 | 解決結果を適用しない |
 
-The single-value initializer supplies one trigger to this resolver. An empty
-trigger array provides a named boundary and DEBUG outline without value-driven
-animation or the barrier's unstamped-animation warning.
+単一値の初期化子は 1 トリガー、空配列は値駆動アニメーションのない境界を表します。
+空配列でも DEBUG の境界を表示でき、バリアのスタンプなし警告は発生しません。
 
-Value-driven stamps travel downstream from the resolver. Observers above the
-scope do not see the local animation or stamp.
+### 履歴と値ゲート
 
-## Proxy-Driven Animation
+SwiftUI は、トランザクションを届ける前に修飾子を複数回評価することがあります。
+履歴は解決結果を保持し、先の `body` 評価で値の変更を消費しないようにします。
+`.transaction(value:)` の値ゲートが、その結果を無関係な更新に適用することを防ぎます。
+
+トリガー数によらず同じ修飾子構造を使います。要素数の変更では比較基準だけを設定し直すため、内容のビューの同一性を保てます。
+
+## プロキシの経路
+
+プロキシの `animate` は、アニメーションとスタンプを持つトランザクションを作り、`withTransaction` で同期操作を実行します。
 
 ```swift
-AnimationScope(.snappy, name: "Menu") { scope in
-    Button("Toggle") {
-        scope.animate {
-            isOpen.toggle()
-        }
-    }
+scope.animate(.spring(duration: 0.4)) {
+    isOpen.toggle()
 }
 ```
 
-The proxy creates a transaction with its animation and stamp, then runs the
-closure with `withTransaction`. The stamp can reach root and descendant
-observers. A matching scope restores the animation after ancestor boundaries
-strip it.
+スタンプはルートと子孫へ届きます。祖先の境界がアニメーションを除去してもスタンプは通過し、
+所有者の ID が一致するスコープで復元します。
 
-Views outside declared boundaries can receive the original animation. Every view
-that reads changed state can still update. Use scopes or barriers around
-unrelated regions that must reject incoming animation.
+値駆動のスタンプは、ローカルなリゾルバーから子孫へだけ進みます。
+上流の観測器には、そのアニメーションもスタンプも見えません。
 
-## Nested Ownership
+どちらの方式でも、状態を読むすべてのビューは更新対象です。
+プロキシの元のアニメーションは境界のない領域にも届くため、拒否する領域にはスコープかバリアを置きます。
 
-A descendant scope is an independent boundary:
+## 入れ子の所有者
 
-- An outer proxy animates the outer region; an inner scope strips its animation.
-- An inner proxy's stamp crosses outer boundaries and is restored at the matching
-  inner scope.
-- An outer value-driven animation is stripped at an inner scope.
-- If an inner trigger also changes, it supplies its own animation and stamp,
-  even when its animation equals the outer animation.
-
-DEBUG `crossScopeAnimationStrip` warnings identify a boundary that removed
-another scope's stamped animation. This is a composition diagnostic.
-`multiTriggerConflict` identifies competing changed values within one scope.
-See <doc:Composition> for choosing a scope structure.
-
-## Diagnostic Visibility
-
-A detector reports non-nil animation without a stamp only when that transaction
-passes through its installation point.
-
-| Source | Root detector | Downstream detector or barrier sensor |
+| 発生源 | 外側のスコープ | 内側のスコープ |
 | --- | --- | --- |
-| Unstamped `withAnimation` or animated `withTransaction` | Detects passing transactions | Detects passing transactions |
-| Raw value animation created below the root detector | Cannot observe it | Detects it when downstream of its source |
-| Stamped animation | No leak report | No leak report |
+| 外側のプロキシ | 一致するアニメーションを復元 | 除去 |
+| 内側のプロキシ | 除去し、スタンプを保持 | 一致するアニメーションを復元 |
+| 外側の値変更 | 外側のアニメーションを適用 | 除去。自身のトリガーが変われば独自に適用 |
+| 両方の値変更 | 外側のアニメーションを適用 | 内側のアニメーションとスタンプを適用 |
 
-Use screen-level detectors, barriers around static or legacy regions, and local
-detectors on suspicious subtrees. Review raw view animation modifiers because
-they can generate transactions below observation points. A stamp establishes
-scope attribution, not proof that every animated view belongs to the intended
-subtree.
+内側は外側とアニメーションが等しい場合も自身のスタンプを付けます。
+DEBUG の `crossScopeAnimationStrip` はスコープ間の遮断、`multiTriggerConflict` は同じスコープ内の値変更の競合を示します。
+配置の選択は <doc:Composition> を参照してください。
 
-Warnings are debounced by kind and applicable scope name, with bounded storage.
-Suppressed warnings skip message formatting. Diagnostics and boundary overlays
-compile out of RELEASE builds.
+## 診断が観測する範囲
 
-## Framework Compatibility
+検出器は、設置点を通る非 nil かつスタンプのないアニメーションを報告します。
 
-Boundary behavior depends on SwiftUI transaction propagation. Hosted behavioral
-tests verify supplied transactions on macOS and iOS. They do not verify
-intermediate animation frames.
+| 発生源 | ルートの検出器 | 下流の検出器・バリア |
+| --- | --- | --- |
+| スタンプのない `withAnimation` / アニメーション付き `withTransaction` | 通過時に検出 | 通過時に検出 |
+| ルートより下の直接の `.animation(_:value:)` | 観測不可 | 発生源より下流なら検出 |
+| スタンプ付きアニメーション | リーク報告なし | リーク報告なし |
 
-The unit-hosting harness does not reliably observe `List` row transaction hooks.
-Use the example app's List QA screen to verify propagation, row barriers, and
-reuse on the target environment. An example build alone does not establish
-those behaviors.
+観測点より下で生成するアニメーションもあるため、画面ルートと調査対象の検出器、バリア、コードレビューを組み合わせます。
+スタンプは所有者への帰属を表します。動くすべてのビューが意図した領域にあることの証明にはなりません。
+
+警告は種別と該当するスコープ名でデバウンスし、記憶量に上限を設けます。
+抑制時はメッセージを整形しません。診断実装と境界オーバーレイは RELEASE から除去されます。
+
+## 検証の範囲
+
+境界の処理は SwiftUI のトランザクション伝播に依存します。
+macOS / iOS のホストテストは渡されたアニメーションとスタンプを確認します。
+挿入・削除に届くトランザクションも対象ですが、中間の描画フレームは検証しません。
+
+ホストテストでは `List` 行のフックが呼ばれない場合があります。
+サンプルのリスト検証画面で、対象環境の伝播・バリア・再利用を確認してください。
+CPU コストとアプリの計測方法は <doc:PerformancePlaybook> を参照してください。

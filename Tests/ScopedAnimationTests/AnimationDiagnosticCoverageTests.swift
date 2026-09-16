@@ -6,10 +6,10 @@
     @testable import ScopedAnimation
 
     extension AnimationScopeBehaviorTests {
-        @Suite("Diagnostic coverage")
+        @Suite("診断の検証範囲")
         @MainActor
         struct DiagnosticCoverage {
-            @Test("Debounced conflicts do not format their animation descriptions")
+            @Test("デバウンスで抑制した競合はアニメーションの説明を整形しない")
             func suppressedConflictFormatting() {
                 let counter = AnimationDescriptionCounter()
                 let animation = Animation(DescriptionProbeAnimation(counter: counter))
@@ -44,7 +44,7 @@
             }
 
             @Test(
-                "Implicit animation is visible only downstream of its source",
+                "暗黙アニメーションは発生源の下流だけで観測できる",
                 arguments: [false, true])
             func implicitAnimation(downstream: Bool) {
                 let model = ProbeModel()
@@ -73,7 +73,7 @@
                 #expect(warnings.warnings.count == (downstream ? 1 : 0))
             }
 
-            @Test("Resizing triggers never reports a conflict, even when all values change")
+            @Test("全値が変わっても要素数変更は競合を報告しない")
             func resizedTriggers() {
                 let model = DynamicTriggerProbeModel(triggerCount: 2)
                 let identities = ViewIdentityRecorder()
@@ -103,7 +103,7 @@
                 #expect(warnings.warnings.isEmpty)
             }
 
-            @Test("Warning capture restores the previous sink and debounce state after a throw")
+            @Test("警告の捕捉は例外時も元の出力先とデバウンス状態を復元する")
             func warningCaptureRestoresState() {
                 enum Failure: Error { case expected }
                 let outer = WarningRecorder()

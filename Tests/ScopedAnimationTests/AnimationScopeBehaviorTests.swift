@@ -1,4 +1,4 @@
 import Testing
 
-@Suite("Animation behavior", .serialized)
+@Suite("アニメーションの挙動", .serialized)
 struct AnimationScopeBehaviorTests {}

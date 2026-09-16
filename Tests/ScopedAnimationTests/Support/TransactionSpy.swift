@@ -50,7 +50,7 @@ final class TransactionRecorder {
         let matches = snapshots.filter { $0.label == label }
         #expect(
             !matches.isEmpty,
-            "No transaction reached \(label). Observed: \(snapshots)",
+            "\(label) にトランザクションが届きませんでした。観測結果: \(snapshots)",
             sourceLocation: sourceLocation
         )
         return matches

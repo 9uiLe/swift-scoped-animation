@@ -11,12 +11,12 @@ DerivedData/
 *.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 
-# Disposable Phase 0 spike code
+# 段階 0 の一時的な検証コード
 spike/
 
-# Local agent/tool caches
+# ローカルのエージェント・ツールのキャッシュ
 .tokensave/
 
-# Release tooling
+# リリースツール
 __pycache__/
 *.pyc

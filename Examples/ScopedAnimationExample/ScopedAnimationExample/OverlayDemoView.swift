@@ -8,14 +8,14 @@ struct OverlayDemoView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            AnimationScope(.spring(duration: 0.45), name: "Outer") { scope in
+            AnimationScope(.spring(duration: 0.45), name: "外側") { scope in
                 VStack(spacing: 16) {
                     HStack(spacing: 12) {
-                        OverlayNode(title: "Queue", active: selected, color: .blue)
-                        OverlayNode(title: "Worker", active: !selected, color: .green)
+                        OverlayNode(title: "キュー", active: selected, color: .blue)
+                        OverlayNode(title: "ワーカー", active: !selected, color: .green)
                     }
 
-                    AnimationScope(.easeInOut(duration: 0.35), value: selected, name: "Value") {
+                    AnimationScope(.easeInOut(duration: 0.35), value: selected, name: "値駆動") {
                         HStack(spacing: 8) {
                             ForEach(0..<5) { index in
                                 Circle()
@@ -30,14 +30,14 @@ struct OverlayDemoView: View {
                     }
 
                     HStack {
-                        Button("Scoped") {
+                        Button("スコープ経由") {
                             scope.animate {
                                 selected.toggle()
                             }
                         }
                         .buttonStyle(.borderedProminent)
 
-                        Button("Raw") {
+                        Button("直接実行") {
                             withAnimation(.easeInOut(duration: 0.4)) {
                                 rawPulse.toggle()
                             }
@@ -93,7 +93,7 @@ struct OverlayDemoView: View {
                 .fill(rawPulse ? Color.red.opacity(0.7) : Color.gray.opacity(0.24))
                 .frame(height: rawPulse ? 86 : 46)
                 .overlay {
-                    Text("Raw probe")
+                    Text("直接実行の観測")
                         .font(.headline)
                         .foregroundStyle(.white)
                 }
@@ -101,7 +101,7 @@ struct OverlayDemoView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color(.systemGroupedBackground))
-        .navigationTitle("Overlay")
+        .navigationTitle("オーバーレイ")
         .detectAnimationLeaks()
         .animationScopeDebugOverlay()
     }

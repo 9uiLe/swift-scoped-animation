@@ -4,10 +4,10 @@ import Testing
 @testable import ScopedAnimation
 
 extension AnimationScopeBehaviorTests {
-    @Suite("Update sequences")
+    @Suite("連続更新")
     @MainActor
     struct UpdateSequences {
-        @Test("Only value changes animate, using the current animation and scope name")
+        @Test("値の変更だけが現在のアニメーションと名前を使って動く")
         func configurationChanges() {
             let model = UpdateModel()
             let recorder = TransactionRecorder()
@@ -40,7 +40,7 @@ extension AnimationScopeBehaviorTests {
             #expect(Set(recorder.matching("child").compactMap { $0.stamp?.id }) == originalIDs)
         }
 
-        @Test("A disabled update advances the value baseline without replaying its animation")
+        @Test("無効な更新は比較基準を進め、後からアニメーションを再生しない")
         func disabledUpdate() {
             let model = UpdateModel()
             let recorder = TransactionRecorder()
@@ -69,7 +69,7 @@ extension AnimationScopeBehaviorTests {
             #expect(recorder.hasAnimation("child", model.animation))
         }
 
-        @Test("Nested simultaneous changes use the inner value scope's stamp")
+        @Test("入れ子の同時変更には内側の値スコープのスタンプを使う")
         func simultaneousNestedValues() {
             let model = ProbeModel()
             let recorder = TransactionRecorder()

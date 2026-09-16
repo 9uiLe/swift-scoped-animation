@@ -65,8 +65,8 @@ final class AnimationTriggerHistory {
     }
 
     func resolve(_ snapshot: AnimationTriggerSnapshot) -> AnimationTriggerResolution? {
-        // SwiftUI can evaluate the modifier more than once before delivering its transaction.
-        // Consuming a change on the first evaluation would lose its animation on the next one.
+        // SwiftUI はトランザクションを届ける前に修飾子を複数回評価することがあります。
+        // 最初の評価で変更を消費すると、次の評価でアニメーションを失うため結果を保持します。
         switch snapshot.change(since: latestSnapshot) {
         case .unchanged:
             return latestResolution

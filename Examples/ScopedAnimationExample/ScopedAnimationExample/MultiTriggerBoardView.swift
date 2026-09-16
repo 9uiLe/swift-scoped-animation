@@ -12,7 +12,7 @@ struct MultiTriggerBoardView: View {
         ScrollView {
             VStack(spacing: 18) {
                 AnimationScope(
-                    name: "Board",
+                    name: "盤面",
                     triggers: [
                         .animation(.easeOut(duration: 0.12), value: selectedCells),
                         .animation(.spring(response: 0.35, dampingFraction: 0.7), value: hintCells),
@@ -39,27 +39,27 @@ struct MultiTriggerBoardView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 HStack(spacing: 10) {
-                    Button("Show hints") {
+                    Button("ヒントを表示") {
                         toggleHints()
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button("Select + hint together") {
+                    Button("選択とヒントを同時に変更") {
                         applyConflictDemo()
                     }
                     .buttonStyle(.bordered)
                 }
 
-                Button("Reset") {
+                Button("リセット") {
                     selectedCells = []
                     hintCells = []
                 }
                 .buttonStyle(.bordered)
 
                 Text(
-                    "One AnimationScope drives both selection (easeOut) and hints (spring). "
-                        + "When both values change in the same transaction, the first trigger in the "
-                        + "array wins. In DEBUG builds, Xcode logs a multiTriggerConflict warning."
+                    "1 つの AnimationScope で選択（easeOut）とヒント（spring）を制御します。"
+                        + "同時に変わると、配列の先頭のトリガーを採用します。"
+                        + "DEBUG ビルドでは Xcode に multiTriggerConflict 警告を出力します。"
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -68,7 +68,7 @@ struct MultiTriggerBoardView: View {
             .padding()
         }
         .background(Color(.systemGroupedBackground))
-        .navigationTitle("Multi-Trigger")
+        .navigationTitle("複数トリガー")
     }
 
     private func toggleSelection(for index: Int) {

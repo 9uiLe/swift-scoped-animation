@@ -55,7 +55,7 @@ struct ScopedAnimationBenchmarks {
                 })
             let history = AnimationTriggerHistory(initialSnapshot: first)
             guard let conflict = history.resolve(second) else {
-                preconditionFailure("Expected a multi-trigger conflict fixture")
+                preconditionFailure("複数トリガーが競合する計測データが必要です")
             }
             for siteCount in [1, 64] {
                 let sink = WarningSinkCounter()
@@ -72,7 +72,7 @@ struct ScopedAnimationBenchmarks {
                     }
                 )
                 precondition(
-                    sink.count == siteCount, "Expected exactly one emitted warning per site")
+                    sink.count == siteCount, "各箇所で警告がちょうど 1 回出力される必要があります")
             }
         #endif
     }

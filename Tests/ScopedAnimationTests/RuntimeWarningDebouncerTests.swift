@@ -3,9 +3,9 @@
     import Foundation
     import Testing
 
-    @Suite("Runtime warning debounce")
+    @Suite("実行時警告のデバウンス")
     struct RuntimeWarningDebouncerTests {
-        @Test("Independent sites do not suppress each other")
+        @Test("独立した警告箇所は互いを抑制しない")
         func independentSites() {
             var debouncer = RuntimeWarningDebouncer(interval: 10)
             let now = Date(timeIntervalSinceReferenceDate: 100)
@@ -18,7 +18,7 @@
             #expect(!repeatedCardReport)
         }
 
-        @Test("Expired entries are removed and can report again")
+        @Test("期限切れの項目は除去され、再び報告できる")
         func expiry() {
             var debouncer = RuntimeWarningDebouncer(interval: 1)
             let first = Date(timeIntervalSinceReferenceDate: 100)
@@ -38,7 +38,7 @@
             #expect(debouncer.entryCount == 1)
         }
 
-        @Test("The oldest site is evicted at the configured bound")
+        @Test("設定した上限で最も古い箇所を除去する")
         func boundedEviction() {
             var debouncer = RuntimeWarningDebouncer(interval: 10, maximumEntryCount: 2)
             let first = Date(timeIntervalSinceReferenceDate: 100)
@@ -58,7 +58,7 @@
             #expect(debouncer.entryCount == 2)
         }
 
-        @Test("Stable site keys survive view remounts")
+        @Test("ビューを再マウントしても箇所キーを維持する")
         func stableSiteKey() {
             let first = AnimationScopeRuntimeWarning.Site(
                 "AnimationScopeBoundary",

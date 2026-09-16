@@ -4,7 +4,7 @@ import Testing
 @testable import ScopedAnimation
 
 extension AnimationScopeBehaviorTests {
-    @Suite("Triggers")
+    @Suite("トリガー")
     @MainActor
     struct Triggers {
         @Test
@@ -251,7 +251,7 @@ extension AnimationScopeBehaviorTests {
         }
 
         @Test(
-            "Resizing preserves state, suppresses animation, and establishes the next baseline",
+            "要素数変更は状態を保持し、アニメーションせず次の比較基準を設定する",
             arguments: [(0, 1), (1, 0), (1, 2), (2, 1), (2, 3), (3, 2), (0, 3), (3, 0)])
         func dynamicTriggerCount(initialCount: Int, updatedCount: Int) {
             let model = DynamicTriggerProbeModel(triggerCount: initialCount)

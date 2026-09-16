@@ -1,81 +1,81 @@
-# ScopedAnimation design
+# ScopedAnimation の設計
 
-ScopedAnimation is a SwiftUI library for declaring animation ownership through
-view-tree boundaries. This document defines the product scope, public contracts,
-internal responsibilities, validation requirements, and roadmap.
+ScopedAnimation は、SwiftUI アニメーションの所有者と、そのアニメーションを受け入れる境界を宣言するライブラリです。
+この文書を製品スコープ・公開 API・意味論・内部構造・ロードマップの設計基準とします。
 
-Start with [README.md](README.md) for installation and examples. Use
-[CONTRIBUTING.md](CONTRIBUTING.md) for build and contribution instructions.
+利用者向けの入口は [README](README.md)、API の解説は [DocC](Sources/ScopedAnimation/Documentation.docc/ScopedAnimation.md)、
+開発と文書管理の手順は[貢献ガイド](CONTRIBUTING.md)です。
 
-## 1. Product and constraints
+## 1. 製品と制約
 
-An `AnimationScope` declares the subtree that owns an animation. Every boundary
-removes incoming animation, and a scope supplies animation through its declared
-value triggers or an explicit proxy action. DEBUG diagnostics expose boundaries
-and report animation transactions without a scope stamp.
+### 解決する問題
 
-The product provides **blocking and detection**. State changes still invalidate
-every view that reads the changed state. Views outside declared boundaries can
-receive a proxy's original animation. Raw SwiftUI animation modifiers inside a
-boundary can create their own animation downstream.
+SwiftUI のアニメーションはトランザクションを通じて伝わります。状態を共有するビューや入れ子のビューでは、
+どの領域がそのアニメーションを受け入れるかを明示する必要があります。
 
-The library uses SwiftUI's `Animation` and `Transaction`. Its scope excludes:
+ScopedAnimation は、次の契約で**アニメーションの遮断と検出**を提供します。
 
-- custom curves, physics engines, or effect collections;
-- UIKit or AppKit animation APIs;
-- automatic control of layout cost, frame rate, or state invalidation;
-- exhaustive leak detection or static analysis of animated layout properties;
-- a SwiftSyntax lint plugin.
+1. スコープとバリアの境界は、外からのアニメーションを取り除く。
+2. スコープは、値の変更または明示的な操作に応じてアニメーションを与え、所有者を示すスタンプを付ける。
+3. DEBUG 診断は境界を表示し、観測点を通るスタンプのないアニメーションを報告する。
 
-Distribution and compatibility:
+状態を読むすべてのビューは更新対象です。プロキシのトランザクションは、境界のない領域にも届きます。
+また、境界より下の SwiftUI 修飾子は独自のアニメーションを生成できます。境界と診断の効力は、宣言した位置に依存します。
 
-| Property | Contract |
+### 配布と実行環境
+
+| 項目 | 契約 |
 | --- | --- |
-| Repository | `swift-scoped-animation` |
-| Product and module | `ScopedAnimation` |
-| Distribution | Swift Package Manager only |
-| Dependencies | No external package dependencies |
-| License | MIT |
-| Platforms | iOS 17+, macOS 14+, tvOS 17+, watchOS 10+, visionOS 1+ |
-| Language | Swift 6 with complete strict concurrency |
-| Development toolchain | Xcode 26.x / Swift 6.3 |
+| リポジトリ | `swift-scoped-animation` |
+| プロダクト・モジュール | `ScopedAnimation` |
+| 配布 | Swift Package Manager、MIT ライセンス |
+| 依存 | 外部パッケージなし |
+| 対応 OS | iOS 17+、macOS 14+、tvOS 17+、watchOS 10+、visionOS 1+ |
+| 言語 | Swift 6、完全な厳格並行性チェック |
+| パッケージ定義 | Swift tools 6.2+ |
+| 開発環境 | Xcode 26.x / Swift 6.3 |
 
-The deployment floors support custom `TransactionKey` values and
-`.transaction(value:)`. Actual propagation behavior is a compatibility
-assumption verified by hosted tests; see
-[SwiftUI assumptions](docs/swiftui-assumptions.md).
+最低対応 OS は、カスタム `TransactionKey` と `.transaction(value:)` を利用できる版です。
+伝播の互換性は第 8 節の検証で確認します。
 
-## 2. Domain model
+### 対象外
 
-| Term | Meaning |
+アニメーションには SwiftUI の `Animation` と `Transaction` を使います。次の機能は製品に含みません。
+
+- 独自のカーブ、物理エンジン、エフェクト集、UIKit / AppKit のアニメーション API
+- 状態による無効化、レイアウトコスト、フレームレートの自動制御
+- 網羅的なリーク検出、アニメーション対象のレイアウト属性の静的解析
+- SwiftSyntax の lint プラグイン
+
+## 2. ドメインモデル
+
+| 用語 | 定義 |
 | --- | --- |
-| Scope | A view container with a stable identity, an animation boundary, and a declared source of animation. |
-| Boundary | A transaction hook that removes incoming animation and preserves its stamp. A scope boundary can restore animation from its own stamp. |
-| Trigger | An `Equatable` value paired with the animation to use when that value changes. |
-| Snapshot | The ordered trigger configuration used for positional value comparison. |
-| Resolution | The first changed trigger, plus lower-priority changed triggers in DEBUG. |
-| Stamp | Internal transaction metadata containing a scope ID, optional display name, and animation payload. |
-| Proxy | An object supplied to scoped content that runs synchronous state changes in a stamped transaction. |
-| Leak | An animation-bearing transaction with no scope stamp at a diagnostic observation point. |
-| Warning site | A debounce key derived from the warning kind and, where applicable, a scope name. |
+| スコープ（Scope） | 安定した ID、境界、アニメーション源を持つビューコンテナ |
+| 境界（Boundary） | 外からのアニメーションを除去し、スタンプを保持するトランザクションフック |
+| バリア（Barrier） | 自身ではアニメーションを復元・生成しない単独の境界 |
+| トリガー（Trigger） | `Equatable` な値と、その変更時に使うアニメーションの組 |
+| スナップショット（Snapshot） | 配列位置で比較する、順序付きのトリガー構成 |
+| 解決結果（Resolution） | 採用するトリガーの位置とアニメーション。DEBUG では不採用の変更済みトリガーも含む |
+| スタンプ（Stamp） | 所有者のスコープ ID、任意の表示名、アニメーションを持つ内部メタデータ |
+| プロキシ（Proxy） | スコープの内容に渡し、スタンプ付きトランザクションで同期的な状態変更を実行する値 |
+| リーク（Leak） | 観測点を通る、スコープのスタンプがないアニメーション付きトランザクション |
+| 警告箇所（Warning site） | 警告種別と、該当する場合はスコープ名から作るデバウンスキー |
 
-A display name is not an identity. A scope keeps the same ID across body
-evaluations while its view identity is stable. Names and animation payloads may
-change without replacing that ID.
+スコープの ID は所有者の同一性を表し、ビューの同一性が維持される間、`body` 評価をまたいで保持します。
+表示名やアニメーションの変更は ID に影響しません。スタンプの等価性とハッシュは ID に基づきます。
 
-## 3. Public API
+## 3. 公開 API
 
-### Value-driven scope
+### 値駆動スコープ
+
+単一値を監視する形式と、複数の値を監視する形式を提供します。
 
 ```swift
 AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
     CardContent(isExpanded: isExpanded)
 }
-```
 
-The single-value initializer is a one-trigger form of the multi-trigger API:
-
-```swift
 AnimationScope(
     name: "Board",
     triggers: [
@@ -87,36 +87,31 @@ AnimationScope(
 }
 ```
 
-Every trigger is visible in the scope declaration. A single scope has one
-boundary and one identity, regardless of the number of triggers.
+単一値の形式も 1 個のトリガーとして扱います。トリガー数によらず、スコープの ID と境界は 1 つずつです。
+値の比較は配列位置ごとに行い、具象型と値が両方等しい場合だけ同値とします。
+型消去後も `Int(1)` と `Optional<Int>.some(1)` を区別します。
 
-| Update | Required behavior |
+| 更新 | 契約 |
 | --- | --- |
-| Initial mount | Establish the value baseline without starting a value-driven animation. |
-| One or more values change | Select the changed trigger closest to the start of the array. Apply its animation and stamp together. |
-| Several values change together | Use the same winner for the whole subtree; report ignored changed triggers in DEBUG. |
-| Values remain equal | Do not start a value-driven animation. |
-| Only an animation or scope name changes | Do not trigger animation. A subsequent value change uses the current configuration. |
-| Trigger count changes | Establish a new baseline without a trigger animation or conflict warning. Preserve content identity and local state. |
-| Triggers are reordered | Compare by position; the new positions also determine priority. |
-| Concrete value type changes | Treat the value as changed, even if Swift can cast between the two types. |
-| `disablesAnimations` is true | Do not apply a value-driven animation or stamp for that resolution. |
+| 初回マウント | 比較基準を設定し、値駆動アニメーションを開始しない |
+| 1 つ以上の値が変化 | 先頭に最も近い変更済みトリガーを選び、アニメーションとスタンプを同時に適用する |
+| 複数の値が同時に変化 | サブツリー全体に同じ選択を適用し、DEBUG で不採用の変更を報告する |
+| 値が等しいまま | 値駆動アニメーションを開始しない |
+| アニメーションまたは名前だけが変化 | 開始しない。次の値変更で現在の設定を使う |
+| トリガー数が変化 | アニメーション・競合警告なしで比較基準を再設定し、内容の同一性とローカル状態を保つ |
+| トリガーを並べ替え | 新しい位置で比較し、その位置を優先順位にも使う |
+| 値の具象型が変化 | 相互にキャスト可能な型でも変更と見なす |
+| `disablesAnimations` が true | 解決結果のアニメーション・スタンプ・競合警告を適用しない |
 
-Values are type-erased for heterogeneous arrays but are equal only when both
-their concrete type and value match. For example, `Int(1)` and
-`Optional<Int>.some(1)` are different trigger values. Keep array composition and
-order stable when those changes are not part of the intended behavior.
+配列構成を動的に変える意図がなければ、要素数と順序を一定に保ちます。
+`triggers: []` は値駆動アニメーションのない境界です。名前を指定すると DEBUG オーバーレイで識別でき、
+バリアに固有のスタンプなしアニメーションの警告は出しません。
 
-`triggers: []` creates a named boundary with no value-driven animation. It strips
-incoming animation, preserves the stamp for descendants, and appears in the
-DEBUG overlay. It does not emit a barrier's unstamped-animation warning. Use
-`animationBarrier()` when no scope label is needed.
-
-### Proxy-driven scope
+### プロキシ駆動スコープ
 
 ```swift
 AnimationScope(.snappy, name: "Disclosure") { scope in
-    Button("Toggle") {
+    Button("切り替え") {
         scope.animate {
             isOpen.toggle()
         }
@@ -124,135 +119,112 @@ AnimationScope(.snappy, name: "Disclosure") { scope in
 }
 ```
 
-The proxy exposes two synchronous operations:
+プロキシは `animate(_:)` と `animate(_:_:)` を提供します。
+前者はスコープの既定アニメーション、後者は呼び出しで指定したアニメーションを使います。
 
 ```swift
-scope.animate {
-    isOpen.toggle()
-}
-
 scope.animate(.spring(duration: 0.4)) {
     selection = nextSelection
 }
 ```
 
-Both create a transaction containing the requested animation and the scope's
-stamp, then execute the closure with `withTransaction`. The second form changes
-the animation for that call.
+どちらもアニメーションとスタンプを持つ `Transaction` を作り、`withTransaction` で同期クロージャを実行します。
+そのトランザクションはルートや同じ状態を読むビューにも届きます。
+受け入れる領域は、一致するスコープ境界と、周囲に配置する境界によって決まります。
 
-The stamped transaction can reach the root and other views that read the
-changed state. Declared boundaries determine where its animation is removed or
-restored. Place a scope or barrier around unrelated regions that must reject it.
-
-### Standalone barrier
+### 単独のバリア
 
 ```swift
-LegacyDashboard()
+StatusPanel()
     .animationBarrier()
 ```
 
-A barrier removes incoming animation and preserves the stamp. It never restores
-an animation. A descendant scope can still supply its own value-driven animation
-or restore a matching proxy stamp.
+`animationBarrier(warnsOnLeaks:)` は外からのアニメーションを除去し、スタンプを子孫へ渡します。
+自身では復元しません。子孫スコープの値駆動アニメーションや一致するプロキシの復元は可能です。
 
-In DEBUG, the barrier warns when it strips an animation without a stamp.
-`animationBarrier(warnsOnLeaks: false)` disables that warning without changing
-the boundary behavior. A barrier does not reserve layout space or prevent
-downstream SwiftUI modifiers from creating animation.
+`warnsOnLeaks` の既定値は true です。false は、スタンプのないアニメーションを除去したときの
+DEBUG 警告だけを抑制します。バリアはレイアウト領域を確保せず、下流でのアニメーション生成も妨げません。
 
-## 4. Transaction semantics
+## 4. トランザクションの意味論
 
-### Boundary processing
-
-A scope boundary processes every incoming transaction in this order:
-
-1. Read its stamp and, in DEBUG, inspect it for applicable diagnostics.
-2. Set `transaction.animation` to `nil`, regardless of stamp ownership.
-3. Preserve the stamp so it can reach descendant scopes.
-4. Restore the stamp's animation only if its ID matches this scope and
-   `transaction.disablesAnimations` is false.
-
-The boundary is outside the value resolver in the modifier chain. SwiftUI
-therefore processes the boundary before the resolver supplies local animation.
+### 処理順序
 
 ```text
-incoming transaction
-        |
-        v
-boundary: strip animation; preserve stamp; restore matching proxy animation
-        |
-        v
-value resolver: apply selected trigger animation and local stamp when eligible
-        |
-        v
-content, including any descendant boundaries
+外からのトランザクション
+    ↓
+境界: アニメーションを除去、スタンプを保持、一致する所有者のアニメーションを復元
+    ↓
+値リゾルバー: 条件を満たすトリガーのアニメーションとスタンプを適用
+    ↓
+内容と子孫の境界
 ```
 
-Value-driven stamps are created inside the scope and travel downstream. An
-observer above that scope does not see those stamps or its locally supplied
-animation. Proxy stamps originate in `withTransaction` and can reach both root
-and descendant observers.
+境界は入力を観測して DEBUG 診断を行い、所有者によらず `transaction.animation` を `nil` にします。
+スタンプは保持し、スコープの ID と一致して `disablesAnimations` が false の場合だけ復元します。
+バリアには復元処理がありません。
 
-### Nested scopes
+修飾子の連鎖では境界が値リゾルバーの外側にあり、外からのアニメーションを処理した後でローカルな値変更を適用します。
+値リゾルバーも `disablesAnimations` を尊重します。
 
-| Animation source | Outer scope region | Inner scope region |
-| --- | --- | --- |
-| Outer proxy | Restores the matching outer stamp | Strips the outer animation |
-| Inner proxy | Strips the nonmatching inner animation but preserves its stamp | Restores the matching inner stamp |
-| Outer value change | Supplies outer animation | Strips outer animation unless an inner trigger supplies its own |
-| Outer and inner value changes | Supplies outer animation | Supplies inner animation and stamps inner ownership |
+### 発生源と伝播方向
 
-An inner value-driven scope stamps its own update even when its selected
-animation compares equal to the outer animation.
-
-Use sibling scopes for separate visual layers. Use multiple triggers in one
-scope when several values control the same subtree. Nesting expresses an
-independent descendant boundary.
-
-### Transitions
-
-Insertion and removal within scoped content receive the eligible scoped
-transaction. Tests verify the supplied animation and stamp. Visual interpolation,
-layout behavior, and framework-hosted row reuse require sample-app QA.
-
-## 5. Internal architecture
-
-| Component | Responsibility |
+| 発生源 | スタンプの経路 |
 | --- | --- |
-| `AnimationScope.swift` | Retain scope identity, adapt content creation, and compose resolver, boundary, and DEBUG overlay registration. Only proxy-driven content receives a proxy. |
-| `AnimationTrigger.swift` | Pair an animation with a type-erased value and compare concrete value types before equality. |
-| `AnimationTriggerResolution.swift` | Compare snapshots, select trigger priority, and retain pending resolutions across repeated body evaluations. |
-| `ValueAnimationResolver.swift` | Gate delivery with `.transaction(value:)` and apply one resolution to animation, stamp, and conflict diagnostics. |
-| `AnimationScopeBoundary.swift` | Implement stripping for scopes and barriers, with matching-stamp restoration enabled only for scopes. |
-| `AnimationBarrier.swift` | Expose the standalone boundary modifier and its diagnostic option. |
-| `AnimationScopeProxy.swift` | Run explicit actions in a transaction containing the scope's stamp and chosen animation. |
-| `TransactionStamp.swift` | Define the transaction key and immutable stamp values. Equality and hashing depend on the scope ID. |
-| `Diagnostics/` | Observe leaks, render boundary outlines, construct typed warning events, debounce, and emit runtime warnings. |
+| 値駆動 | リゾルバーから子孫へ。上流の観測器にはローカルなアニメーションもスタンプも見えない |
+| プロキシ | `withTransaction` からルートと子孫へ。祖先の境界を通り、一致する所有者で復元できる |
 
-### Resolver state
+### 入れ子
 
-All trigger counts use the same modifier structure. Changing the array length
-does not replace the content branch.
+| 発生源 | 外側の領域 | 内側の領域 |
+| --- | --- | --- |
+| 外側のプロキシ | 一致するスタンプを復元 | 外側のアニメーションを除去 |
+| 内側のプロキシ | アニメーションを除去し、スタンプを保持 | 一致するスタンプを復元 |
+| 外側の値変更 | 外側のアニメーションを適用 | 除去する。内側のトリガーも変われば独自に適用 |
+| 外側と内側の値変更 | 外側のアニメーションを適用 | 内側のアニメーションと所有者スタンプを適用 |
 
-`AnimationTriggerHistory` is main-actor isolated. One comparison classifies a
-snapshot as unchanged, structurally changed, or value changed:
+内側は外側とアニメーションが等しい場合も、自身のスタンプを付けます。
+別々の表示レイヤーには兄弟スコープ、同じサブツリーの複数条件には複数トリガー、独立した子孫の所有者には入れ子を使います。
 
-- An unchanged snapshot returns the pending resolution.
-- A count change clears the pending resolution and stores the new baseline.
-- A value change stores the new snapshot and its resolution.
+スコープ内の挿入・削除にも、条件を満たしたスコープのトランザクションが届きます。
+テストで検証するのは渡されたアニメーションとスタンプです。補間、レイアウト、行の再利用は手動 QA で確認します。
 
-SwiftUI may evaluate a modifier more than once before delivering its
-transaction. Retaining the pending resolution prevents an early evaluation from
-consuming the animation. The value gate prevents that retained result from
-animating an unrelated update.
+## 5. 内部構造
 
-A selection pairs an index with its animation. The resolver and diagnostics use
-that same selection, so priority and the animation payload cannot drift between
-independent calculations. Rejected selections exist only in DEBUG.
+構成、値の選択、トランザクションへの適用、診断をそれぞれ独立した責務にします。
 
-## 6. DEBUG diagnostics
+| 要素 | 責務 |
+| --- | --- |
+| `AnimationScope.swift` | ID を保持し、内容生成・リゾルバー・境界・DEBUG 登録を組み立てる。プロキシ駆動の内容にだけプロキシを渡す |
+| `AnimationTrigger.swift` | アニメーションと型消去した値を保持し、具象型と等価性を比較する |
+| `AnimationTriggerResolution.swift` | スナップショットを比較し、優先するトリガーを選択し、履歴を管理する |
+| `ValueAnimationResolver.swift` | `.transaction(value:)` で適用を制御し、解決結果からアニメーション・スタンプ・競合診断を生成する |
+| `AnimationScopeBoundary.swift` | スコープとバリアの除去を実装し、スコープで一致するスタンプを復元する |
+| `AnimationBarrier.swift` | 単独の境界修飾子と警告オプションを公開する |
+| `AnimationScopeProxy.swift` | スタンプ付きのトランザクションで同期操作を実行する |
+| `TransactionStamp.swift` | トランザクションキーと不変なスタンプを定義する |
+| `Diagnostics/` | 観測、境界表示、型付き警告、デバウンス、実行時警告の出力を担う |
 
-### Detection and placement
+### 履歴と適用の分担
+
+`AnimationTriggerHistory` はメインアクターに隔離し、1 回の比較で次を判定します。
+
+| 比較結果 | 履歴の処理 |
+| --- | --- |
+| 変更なし | 保留中の解決結果を返す |
+| 要素数の変更 | 解決結果を消し、新しい比較基準を保存する |
+| 値の変更 | スナップショットと解決結果を保存する |
+
+SwiftUI はトランザクションを届ける前に修飾子を複数回評価することがあります。
+解決結果を保持することで、先の評価でアニメーションを消費することを防ぎます。
+`.transaction(value:)` の値ゲートは、保留中の結果が無関係な更新へ適用されることを防ぎます。
+
+0 個・1 個・複数のトリガーに同じ修飾子構造を使い、要素数変更でも内容の分岐を置き換えません。
+選択したインデックスとアニメーションは 1 つの解決結果で保持し、適用と診断で共有します。
+不採用の選択結果は DEBUG にだけ存在します。
+
+## 6. DEBUG 診断
+
+### 観測と配置
 
 ```swift
 RootView()
@@ -260,155 +232,138 @@ RootView()
     .animationScopeDebugOverlay()
 ```
 
-A detector sees only transactions passing through its installation point.
+リーク検出器が観測するのは設置点を通過するトランザクションです。
 
-| Source at the observation point | Root detector | Downstream detector or barrier sensor |
+| 発生源 | ルートの検出器 | 下流の検出器・バリア |
 | --- | --- | --- |
-| Unstamped `withAnimation` or animated `withTransaction` | Detects the passing transaction | Detects the passing transaction |
-| Raw `.animation(_:value:)` below the root observer | Cannot observe animation created below it | Detects it when downstream of its source |
-| Stamped animation | Does not report a leak | Does not report a leak |
+| スタンプのない `withAnimation` / アニメーション付き `withTransaction` | 通過時に検出 | 通過時に検出 |
+| ルートより下の直接の `.animation(_:value:)` | 観測不可 | 発生源より下流なら検出 |
+| スタンプ付きアニメーション | リーク報告なし | リーク報告なし |
 
-Place detectors at screen roots or suspicious subtree boundaries. Automatically
-installing them on every row multiplies transaction-hook work. Use barriers
-around regions that reject incoming animation, and review raw animation calls
-that may generate transactions below observation points.
+画面ルートや調査対象に検出器を置き、外からのアニメーションを拒否する領域にバリアを置きます。
+直接のアニメーション修飾子は観測点より下で動きを生成できるため、コードの確認も必要です。
 
-### Warning contracts
+### 警告
 
-| Event | Condition |
+| イベント | 発生条件 |
 | --- | --- |
-| Unscoped animation | A detector observes non-nil animation without a stamp. |
-| Barrier leak | A warning-enabled barrier strips non-nil animation without a stamp. |
-| `crossScopeAnimationStrip` | A scope strips another scope's animation-bearing stamp while animations are enabled. |
-| `multiTriggerConflict` | A value resolution has more than one changed trigger while animations are enabled. |
+| スコープなしアニメーション | 検出器がスタンプのない非 nil アニメーションを観測 |
+| バリアのリーク警告 | 警告が有効なバリアがスタンプのない非 nil アニメーションを除去 |
+| `crossScopeAnimationStrip` | アニメーションが有効な状態で、別スコープのスタンプ付きアニメーションを除去 |
+| `multiTriggerConflict` | アニメーションが有効な状態で、複数の変更済みトリガーを解決 |
 
-Warning events carry typed data. Message formatting occurs when an accepted
-event's consumer reads the message, after debounce. The default sink uses
-`os_log` runtime issues without a package dependency.
+警告は型付きデータを運び、デバウンスを通過して受け手が読む時点でメッセージを整形します。
+標準出力先は `os_log` の実行時警告です。
 
-Debounce sites use warning kind and, for scope-specific warnings, the scope name.
-Empty and absent names share the unnamed site. Different views with the same
-kind and name can therefore share a debounce window. The default interval is
-one second, with at most 64 stored sites. Expired entries are removed and storage
-remains bounded.
+デバウンスキーは警告種別と、スコープ別の警告ではスコープ名から作ります。
+空文字と名前なしは同じ箇所とし、同じ種別・名前の別ビューも抑制期間を共有します。
+標準間隔は 1 秒、保持上限は 64 箇所です。期限切れの項目を除去します。
+状態と出力先はロックで保護し、テストでの差し替えは正常終了・例外の両方で復元します。
 
-The warning state and sink are lock protected. Tests replace them within a
-scoped capture operation that restores both on return or throw.
+### 境界表示とビルド構成
 
-### Overlay and RELEASE behavior
+スコープはアンカーの preference で境界を登録します。オーバーレイは破線とラベルを描画し、ID から安定した色を決めます。
+レイアウトとスクロールに追従し、タップ判定やアクセシビリティの移動対象にはなりません。
 
-Scopes register bounds through anchor preferences. The overlay resolves those
-anchors into dashed outlines and labels, with stable colors derived from IDs.
-It follows layout and scroll changes, ignores hit testing, and is hidden from
-accessibility navigation.
+診断実装、境界登録、不採用トリガーの記憶領域は `#if DEBUG` に限定します。
+RELEASE の検出器とオーバーレイは受け取ったビューを返します。
+バイナリ監査では DEBUG に診断マーカーが存在することと、RELEASE での不在を両方確認します。
 
-Diagnostic implementations and rejected-trigger storage are guarded by
-`#if DEBUG`. The detector and overlay return the original view in RELEASE.
-The release audit checks that diagnostic markers appear in DEBUG artifacts and
-are absent from RELEASE artifacts.
+## 7. 性能モデル
 
-## 7. Performance model
+| 処理 | コストの決まり方 |
+| --- | --- |
+| トリガー生成 | 配列・クロージャの記憶領域、型消去、入力値の生成 |
+| 履歴解決 | トリガー数と各 `Equatable` の比較コスト。RELEASE は最初の変化で停止、DEBUG は競合も収集 |
+| 変更なしの比較 | すべての値を比較 |
+| SwiftUI の値ゲート | 履歴解決とは別にスナップショットを比較 |
+| 抑制された警告 | 整形を省き、キー検索・ロック・上限付き記憶領域の管理を実行 |
+| DEBUG オーバーレイ | 境界数とレイアウト更新に応じて処理 |
 
-Scopes constrain incoming animation; they do not remove state dependencies,
-reduce body evaluation by definition, or guarantee a frame rate.
+プロキシスコープのスナップショットは空です。単独バリアにはトリガー履歴がありません。
+高価な派生値や大きなコレクションは比較・生成の負荷になるため、条件を表せる範囲で小さな値を使います。
 
-- Trigger comparison cost depends on count and `Equatable` complexity. RELEASE
-  history stops at the first changed trigger. DEBUG also collects competing
-  changes. Unchanged snapshots require all values to compare equal.
-- SwiftUI's value gate compares snapshots separately from history resolution.
-- Trigger construction includes array storage and type erasure. Large derived
-  values can cost more than scope bookkeeping.
-- A proxy scope uses an empty trigger snapshot. A standalone barrier requires
-  no trigger history.
-- Suppressed warnings avoid message formatting but still perform site lookup,
-  locking, and bounded debounce bookkeeping.
-- DEBUG overlay work scales with registered boundaries and layout updates.
+スコープは状態依存を切らず、`body` 評価数やフレームレートを保証しません。
+内部の CPU 計測と、対象アプリのレイアウト・描画計測を分けて評価します。
+[性能ガイド](Sources/ScopedAnimation/Documentation.docc/PerformancePlaybook.md)、
+[ベンチマーク手順](Benchmarks/README.md)、[参考計測](docs/performance.md)に方法と測定範囲を定義します。
 
-Keep animated subtrees and trigger values small when that matches the intended
-behavior. Measure layout-sensitive properties and expensive effects in the
-application. See the [Performance Playbook](Sources/ScopedAnimation/Documentation.docc/PerformancePlaybook.md),
-[benchmark method](Benchmarks/README.md), and
-[reference measurements](docs/performance.md).
+## 8. 検証と互換性
 
-## 8. Validation and compatibility
+### 自動テスト
 
-### Automated contracts
+macOS / iOS にホストした SwiftUI から、トランザクション spy で記録を取得します。
+Swift Testing の直列メインアクタースイートを使い、ホストを保持して `defer` で閉じます。
+待機はランループまたは明示的な期待条件で行い、sleep を使いません。
 
-The primary harness records transactions in hosted SwiftUI content on macOS and
-iOS. Tests use Swift Testing and a serialized main-actor suite. Each test retains
-its host, closes it with `defer`, and pumps the run loop or uses explicit
-expectations instead of sleeping.
+「アニメーションがない」という判定にも観測が必要です。記録が空なら失敗とし、
+`Animation`、スタンプ、`disablesAnimations` を直接検証します。デバッグ文字列を等価性の契約にしません。
 
-An absence-of-animation assertion requires an observed transaction. Zero
-observations fail the test. Assertions inspect animation values, stamps, and
-`disablesAnimations` directly; debug descriptions are not an equality contract.
+| 検証層 | 対象 |
+| --- | --- |
+| ホストした振る舞いテスト | 境界、プロキシ経路、値トリガー、同時変更、無効化、連続更新、要素数変更時の同一性、所有者、診断配置 |
+| 純粋なテスト | 型と値の比較、選択、スタンプの同一性、上限付きデバウンス |
+| RELEASE テストとバイナリ監査 | 診断の除去と出荷構成での挙動 |
+| リリースツールのテスト | 文書の整合性、対象 CI、公開条件、中断・再実行。模擬 GitHub 応答を使用 |
 
-Coverage includes boundaries, proxy routing, value triggers, simultaneous
-changes, disabled updates, sequential updates, identity during trigger resizing,
-stamp ownership, diagnostic controls, debounce, and RELEASE behavior. Pure tests
-cover value comparison, selection, stamp identity, and bounded bookkeeping.
+### 互換性の判定
 
-### Framework assumptions
+境界での除去、ローカル復元、スタンプ伝播、値ゲートは、依存する機能の前提です。
+[SwiftUI の前提](docs/swiftui-assumptions.md)に検証との対応を定義します。
+成立しない環境では、再現例と設計判断を求めます。公開契約を黙って変えて対応してはいけません。
 
-Boundary stripping, local restoration, stamp propagation, and the value gate
-must hold before features rely on them. Compatibility failures require a
-reproduction and a design decision; do not silently change the public contract
-to accommodate a changed OS behavior.
+ホストテストで `List` 行のフックが呼ばれない場合、行への伝播は未検証です。
+サンプルの行カウンターと目視確認で補います。ビルド成功は、中間フレーム、再利用、キャンセル UI の証拠にはなりません。
+OS や Xcode のメジャー更新時は[サンプル QA](Examples/QA.md)も実行します。
+[検証記録](docs/validation.md)には、環境・対象ソース・実出力・未検証範囲を明記します。
 
-The hosted harness cannot establish `List` row propagation: row hooks may not
-execute under unit hosting. Use the sample's row counters and visual checks.
-Build success does not prove animation frames, cell reuse, or cancellation UI.
-Run the [example QA procedure](Examples/QA.md) for supported OS and Xcode changes.
+## 9. ロードマップと依存順序
 
-[Validation results](docs/validation.md) identify tested environments, actual
-command output, and unverified areas.
+機能の開発・互換性の評価は、次の依存順序に従います。
 
-## 9. Roadmap and dependency order
-
-The roadmap has three ordered phases. Features may rely only on validated
-foundation behavior.
-
-| Phase | Scope | Status and gate |
+| 段階 | 範囲 | 状態と条件 |
 | --- | --- | --- |
-| 0 — SwiftUI assumptions | Stripping, local restoration, stamping, detector placement, value gating, and overlay geometry | Evidence and executable checks are documented in `docs/swiftui-assumptions.md`. Core behavior depends on these contracts. |
-| 1 — Core library | Value and proxy scopes, barriers, DEBUG diagnostics, behavioral tests, DocC, CI, and sample QA | APIs are implemented. Release validation requires macOS and iOS tests, RELEASE auditing, documentation, and example QA. |
-| 2 — Extensions | Multiple value triggers, transition helpers, lint guidance, and wider device validation | Multiple value triggers are implemented. Remaining candidates are listed below and require separate design decisions. |
+| 0 — SwiftUI の前提 | 除去、ローカル復元、スタンプ、検出器配置、値ゲート、境界の形状 | 根拠と検証は `docs/swiftui-assumptions.md`。コア挙動の前提 |
+| 1 — コアライブラリ | 値・プロキシスコープ、バリア、DEBUG 診断、振る舞いテスト、DocC、CI、QA | API は実装済み。リリース検証に macOS/iOS テスト、RELEASE 監査、文書、サンプル QA が必要 |
+| 2 — 拡張 | 複数値トリガー、トランジション補助、lint 指針、実機検証の拡大 | 複数値トリガーは実装済み。ほかの候補には個別の設計判断が必要 |
 
-Remaining candidates:
+設計判断の対象となる候補：
 
-- Transition helpers with an explicit contract beyond the transaction support
-  already provided by scopes.
-- SwiftLint `custom_rules` guidance for teams restricting raw `withAnimation`
-  and view animation modifiers. Rules must distinguish the supported
-  `AnimationTrigger.animation(_:value:)` factory.
-- Physical watchOS and visionOS validation.
+- トランザクションを渡す契約に加えて、明示的な契約を持つトランジション補助
+- `withAnimation` とビュー修飾子を制限するチーム向けの SwiftLint `custom_rules` 指針。
+  `AnimationTrigger.animation(_:value:)` ファクトリーを区別する必要がある
+- watchOS / visionOS の実機検証
 
-No candidate changes the current scope ownership, boundary, or priority rules.
+候補機能も、所有者・境界・トリガー優先順位のルールに従います。
 
-## 10. Release architecture
+## 10. 文書とリリース
 
-The repository owner prepares and publishes releases through local
-`scripts/release.py` commands. GitHub Actions validates source commits with
-read-only permissions; it holds no publication credentials.
+### 文書の責務と言語
 
-- `prepare X.Y.Z` reads a fetched `origin/master` snapshot, versions the
-  CHANGELOG and README on `release/X.Y.Z`, and opens a PR.
-- `check X.Y.Z` validates the owner, upstream repository, versioned documents,
-  source SHA, exact master push CI, and existing tag/Release state.
-- `publish X.Y.Z` repeats validation, creates an annotated `vX.Y.Z` tag and
-  matching draft Release, then publishes and verifies the immutable Release.
+日本語を基本言語とします。設計・DocC・API コメント・診断・サンプル・開発手順は日本語です。
+利用と参加の入口である README・貢献ガイド・セキュリティ方針・行動規範に `.en.md` の英語版を提供し、
+同じ契約と案内を同じ PR で更新します。[貢献ガイド](CONTRIBUTING.md#言語方針)に管理規則を定義します。
 
-SwiftPM can consume a version as soon as its remote tag exists, so all
-publication prerequisites must hold before tag creation. The required CI jobs
-are `build-test-docs` and `Release tooling checks`. Documentation-only master
-commits run both jobs; another SHA's success cannot qualify.
+この設計書は製品の契約、コードは実現方法、テストは要求する挙動を管理します。
+検証記録は対象ソースと環境に結び付く証拠を、CHANGELOG は利用者向けの変更履歴を、コミット履歴は変更理由を扱います。
 
-A retry resumes from an existing annotated tag's commit. Tags are never moved,
-deleted, or replaced by the tool. Matching published immutable releases return
-their URL without writes. Conflicting metadata or CI results stop publication.
+### 公開モデル
 
-The package uses stable numeric command versions and `v`-prefixed tags, with
-source-only GitHub Releases. The owner selects versions and merges release
-preparation PRs. The [release guide](docs/releasing.md) defines prerequisites,
-protection settings, and recovery; standard-library Python tests exercise the
-publication state machine without GitHub writes.
+所有者がローカルの `scripts/release.py` で準備と公開を行います。
+GitHub Actions は読み取り権限で検証し、公開用の認証情報を持ちません。
+
+| コマンド | 責務 |
+| --- | --- |
+| `prepare X.Y.Z` | 取得した `origin/master` を基に `release/X.Y.Z` で CHANGELOG と両 README を更新し、PR を作成 |
+| `check X.Y.Z` | 所有者・上流・文書・SHA・対象コミットの master push CI・タグ・Release を検証 |
+| `publish X.Y.Z` | 再検証し、注釈付き `vX.Y.Z` タグと下書き Release を作成または再開して、公開後の不変性を確認 |
+
+SwiftPM はリモートタグの作成時点からそのバージョンを利用できます。公開条件はタグ作成前に確認します。
+対象 SHA の master push CI で、`build-test-docs` と `Release tooling checks` の両方が成功している必要があります。
+文書だけの master 更新にも両ジョブを実行します。
+
+再実行は、存在する注釈付きタグのコミットを使います。タグは移動・削除・置換しません。
+一致する公開済みの不変な Release は書き込みなしで URL を返し、不一致は停止します。
+コマンドには数値の安定版バージョンを渡し、GitHub Release はソースのみを配布します。
+
+[リリース手順](docs/releasing.md)に、認証・保護設定・検証条件・状態ごとの再開方法を定義します。

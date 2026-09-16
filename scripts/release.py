@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare and publish owner-authenticated Swift package releases."""
+"""所有者の認証で Swift パッケージのリリースを準備・検証・公開します。"""
 
 import argparse
 from dataclasses import dataclass
@@ -17,6 +17,7 @@ REPOSITORY = f"{OWNER}/swift-scoped-animation"
 BRANCH = "master"
 WORKFLOW = ".github/workflows/ci.yml"
 REQUIRED_JOBS = {"build-test-docs", "Release tooling checks"}
+READMES = ("README.md", "README.en.md")
 REMOTE = f"https://github.com/{REPOSITORY}.git"
 VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 RELEASE_HEADING = re.compile(r"^## ([0-9]+\.[0-9]+\.[0-9]+) - (\d{4}-\d{2}-\d{2})$", re.M)
@@ -38,7 +39,7 @@ def require(condition, message):
 def version_key(version):
     require(
         VERSION.fullmatch(version),
-        "Use a stable version such as 0.3.0 (no v prefix or prerelease suffix).",
+        "0.3.0 のような安定版を指定してください（v 接頭辞・プレリリース接尾辞は不可）。",
     )
     return tuple(int(part) for part in version.split("."))
 
@@ -51,20 +52,20 @@ def changelog_headings(changelog):
     headings = list(re.finditer(r"^## (.+)$", changelog, re.M))
     require(
         len(headings) >= 2 and headings[0].group(1) == "Unreleased",
-        "CHANGELOG must start with one Unreleased section followed by released versions.",
+        "CHANGELOG の先頭に Unreleased を 1 つ置き、その後に公開済みバージョンを並べてください。",
     )
     versions = []
     for heading in headings[1:]:
         match = RELEASE_HEADING.fullmatch(heading.group(0))
-        require(match, f"Invalid CHANGELOG release heading: {heading.group(0)}")
+        require(match, f"CHANGELOG のリリース見出しが不正です: {heading.group(0)}")
         versions.append(version_key(match.group(1)))
         try:
             date.fromisoformat(match.group(2))
         except ValueError as error:
-            raise ReleaseError("CHANGELOG release dates must be valid ISO dates.") from error
+            raise ReleaseError("CHANGELOG の日付は有効な ISO 形式にしてください。") from error
     require(
         all(newer > older for newer, older in zip(versions, versions[1:])),
-        "CHANGELOG versions must be unique and ordered newest first.",
+        "CHANGELOG のバージョンは重複させず、新しい順に並べてください。",
     )
     return headings
 
@@ -73,39 +74,49 @@ def release_notes(changelog, version):
     version_key(version)
     headings = changelog_headings(changelog)
     released = RELEASE_HEADING.fullmatch(headings[1].group(0))
-    require(released.group(1) == version, f"The first CHANGELOG release must be {version}.")
+    require(released.group(1) == version, f"CHANGELOG の最新リリースを {version} にしてください。")
     pending = changelog[headings[0].end() : headings[1].start()].strip()
     require(
         not pending,
-        "Unreleased must be empty before publishing; prepare all pending changes first.",
+        "公開前に Unreleased を空にしてください。未公開の変更をすべて準備してください。",
     )
     end = headings[2].start() if len(headings) > 2 else len(changelog)
     notes = changelog[headings[1].end() : end].strip()
-    require(re.search(r"^- \S", notes, re.M), "The release needs CHANGELOG entries.")
+    require(re.search(r"^- \S", notes, re.M), "リリースには CHANGELOG の変更項目が必要です。")
     return notes
 
 
-def prepare_documents(changelog, readme, version, today):
+def validate_readmes(readmes, version):
+    for path in READMES:
+        dependency = INSTALLATION.findall(readmes.get(path, ""))
+        require(
+            len(dependency) == 1 and dependency[0][1] == version,
+            f"{path} の導入宣言は 1 つとし、バージョンを {version} に合わせてください。",
+        )
+
+
+def prepare_documents(changelog, readmes, version, today):
     version_key(version)
     headings = changelog_headings(changelog)
     previous = RELEASE_HEADING.fullmatch(headings[1].group(0)).group(1)
     require(
         version_key(version) > version_key(previous),
-        "The version must be newer than the last CHANGELOG release.",
+        "CHANGELOG の最新リリースより新しいバージョンを指定してください。",
     )
     entries = changelog[headings[0].end() : headings[1].start()].strip()
-    require(re.search(r"^- \S", entries, re.M), "Unreleased has no release entries.")
-    dependency = INSTALLATION.findall(readme)
-    require(
-        len(dependency) == 1 and dependency[0][1] == previous,
-        "README needs one ScopedAnimation dependency matching the latest CHANGELOG release.",
-    )
+    require(re.search(r"^- \S", entries, re.M), "Unreleased に変更項目がありません。")
+    validate_readmes(readmes, previous)
     position = headings[0].end()
     changelog = (
         changelog[:position] + f"\n\n## {version} - {today.isoformat()}" + changelog[position:]
     )
-    readme = INSTALLATION.sub(lambda match: match.group(1) + version + match.group(3), readme)
-    return changelog, readme
+    updated_readmes = {
+        path: INSTALLATION.sub(
+            lambda match: match.group(1) + version + match.group(3), readmes[path]
+        )
+        for path in READMES
+    }
+    return changelog, updated_readmes
 
 
 def successful_run(runs, workflow_id, commit):
@@ -123,12 +134,12 @@ def successful_run(runs, workflow_id, commit):
     ]
     require(
         matching,
-        f"No master push CI run exists for {commit}. Wait for CI after merging the release PR.",
+        f"{commit} の master push CI がありません。準備 PR をマージして CI を待ってください。",
     )
     run = max(matching, key=lambda item: (item["run_number"], item["run_attempt"]))
     require(
         run.get("status") == "completed" and run.get("conclusion") == "success",
-        f"The latest CI run for {commit} has not succeeded: {run.get('html_url', '')}",
+        f"{commit} の最新 CI は成功していません: {run.get('html_url', '')}",
     )
     return run
 
@@ -140,7 +151,7 @@ def validate_jobs(jobs, commit):
             len(matching) == 1
             and matching[0].get("conclusion") == "success"
             and matching[0].get("head_sha") == commit,
-            f"CI job {name!r} must succeed for the release commit.",
+            f"CI ジョブ {name!r} は対象コミットで成功する必要があります。",
         )
 
 
@@ -163,13 +174,19 @@ class Release:
             os.environ, GH_HOST="github.com", GH_PROMPT_DISABLED="1", GIT_TERMINAL_PROMPT="0"
         )
         result = subprocess.run(
-            arguments, cwd=self.root, env=environment, input=input, text=True, capture_output=True
+            arguments,
+            cwd=self.root,
+            env=environment,
+            input=input,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
         )
         if result.returncode:
             if allow_missing and "(HTTP 404)" in result.stderr:
                 return None
             raise ReleaseError(
-                result.stderr.strip() or result.stdout.strip() or f"{arguments[0]} failed"
+                result.stderr.strip() or result.stdout.strip() or f"{arguments[0]} が失敗しました"
             )
         return result.stdout.strip()
 
@@ -212,21 +229,21 @@ class Release:
     def authenticate(self):
         require(
             os.environ.get("GITHUB_ACTIONS") != "true",
-            "Run releases locally with the owner's GitHub CLI authentication.",
+            "リリースは所有者の GitHub CLI 認証を使い、ローカルで実行してください。",
         )
         require(
             not self.git("status", "--porcelain"),
-            "Commit or set aside working-tree changes before running release commands.",
+            "リリースコマンドの前に作業ツリーの変更をコミットするか退避してください。",
         )
         origin = self.git("remote", "get-url", "origin")
         require(
             origin in {REMOTE, REMOTE.removesuffix(".git"), f"git@github.com:{REPOSITORY}.git"},
-            f"origin must be {REMOTE}.",
+            f"origin は {REMOTE} を指定してください。",
         )
         user = self.api("user")
         require(
             user.get("login") == OWNER,
-            f"Authenticate gh as {OWNER}; active user is {user.get('login')}.",
+            f"gh を {OWNER} で認証してください。現在のユーザー: {user.get('login')}。",
         )
         repository = self.api(f"repos/{REPOSITORY}")
         require(
@@ -234,7 +251,7 @@ class Release:
             and repository.get("visibility") == "public"
             and repository.get("default_branch") == BRANCH
             and repository.get("permissions", {}).get("admin"),
-            "The release repository must be public, use master, and grant the authenticated owner admin access.",
+            "公開リポジトリで master を使用し、認証した所有者に管理者権限を付与してください。",
         )
         self.remote_git(
             "fetch", REMOTE, f"refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}", "--tags"
@@ -247,12 +264,12 @@ class Release:
             return None
         require(
             reference["object"]["type"] == "tag",
-            f"{version} must be an annotated tag; refusing to replace it.",
+            f"{version} は注釈付きタグである必要があります。既存タグは置換しません。",
         )
         tag = self.api(f"repos/{REPOSITORY}/git/tags/{reference['object']['sha']}")
         require(
             tag.get("tag") == tag_name(version) and tag["object"]["type"] == "commit",
-            "The release tag must point directly to a commit.",
+            "リリースタグはコミットを直接指す必要があります。",
         )
         return tag["object"]["sha"]
 
@@ -265,17 +282,19 @@ class Release:
         ]
         require(
             not versions or version_key(version) > max(versions),
-            "A newer or equal package version has already been tagged.",
+            "同じか新しいパッケージバージョンのタグが既にあります。",
         )
 
     def find_release(self, version):
-        # The tag endpoint omits drafts; the authenticated list includes them.
+        # タグ別の取得 API は下書きを省くため、認証済みの一覧から探します。
         matches = [
             release
             for release in self.pages(f"repos/{REPOSITORY}/releases")
             if release.get("tag_name") == tag_name(version)
         ]
-        require(len(matches) <= 1, "Multiple Releases use this version; inspect them manually.")
+        require(
+            len(matches) <= 1, "同じバージョンの Release が複数あります。手動で確認してください。"
+        )
         return matches[0] if matches else None
 
     def validate_release(self, release, version, commit, notes):
@@ -287,12 +306,12 @@ class Release:
             and not release.get("prerelease")
             and not release.get("assets")
             and release.get("body", "").strip() == notes,
-            "The existing Release differs from the owner, commit, notes, or source-only release plan; inspect it manually.",
+            "既存の Release の所有者・コミット・ノート・ソースのみという条件が一致しません。手動で確認してください。",
         )
         if not release.get("draft"):
             require(
                 release.get("immutable") is True,
-                "The published Release is not immutable; inspect its repository settings.",
+                "公開済み Release が不変ではありません。リポジトリ設定を確認してください。",
             )
 
     def plan(self, version):
@@ -301,33 +320,32 @@ class Release:
         immutable = self.api(f"repos/{REPOSITORY}/immutable-releases", missing=True)
         require(
             immutable and immutable.get("enabled"),
-            "Enable Immutable releases in the repository before publishing.",
+            "公開前にリポジトリの Immutable releases を有効にしてください。",
         )
         tag_commit = self.tag(version)
         commit = tag_commit or master
-        require(re.fullmatch(r"[0-9a-f]{40}", commit), "The release needs a full commit SHA.")
         require(
-            self.git("merge-base", commit, master) == commit, "The tag commit is not on master."
+            re.fullmatch(r"[0-9a-f]{40}", commit), "リリースには完全なコミット SHA が必要です。"
+        )
+        require(
+            self.git("merge-base", commit, master) == commit,
+            "タグのコミットが master の履歴にありません。",
         )
         notes = release_notes(self.source(commit, "CHANGELOG.md"), version)
-        dependency = INSTALLATION.findall(self.source(commit, "README.md"))
-        require(
-            len(dependency) == 1 and dependency[0][1] == version,
-            "README must install the release version.",
-        )
+        validate_readmes({path: self.source(commit, path) for path in READMES}, version)
         release = self.find_release(version)
         if release:
             require(
-                tag_commit, "A Release without the expected annotated tag needs manual inspection."
+                tag_commit, "Release に対応する注釈付きタグがありません。手動で確認してください。"
             )
             self.validate_release(release, version, commit, notes)
             if not release["draft"]:
-                return PublishPlan(version, commit, notes, "Already published", True, release)
+                return PublishPlan(version, commit, notes, "公開済み", True, release)
         self.ensure_new_version(version)
         workflow = self.api(f"repos/{REPOSITORY}/actions/workflows/ci.yml")
         require(
             workflow.get("path") == WORKFLOW and workflow.get("state") == "active",
-            "The trusted CI workflow must be active.",
+            "対象の CI ワークフローが有効である必要があります。",
         )
         runs = self.pages(
             f"repos/{REPOSITORY}/actions/workflows/{workflow['id']}/runs"
@@ -351,21 +369,21 @@ class Release:
         current_tag = self.tag(version)
         require(
             current_tag is None or current_tag == plan.commit,
-            "The remote tag changed during validation.",
+            "検証中にリモートタグが変わりました。",
         )
         if current_tag is None:
-            require(not plan.tag_exists, "The remote tag was deleted during validation.")
+            require(not plan.tag_exists, "検証中にリモートタグが削除されました。")
             current_master = self.api(f"repos/{REPOSITORY}/git/ref/heads/{BRANCH}")["object"]["sha"]
             require(
                 current_master == plan.commit,
-                "master changed during validation; run the command again.",
+                "検証中に master が変わりました。コマンドを再実行してください。",
             )
             tag = self.api(
                 f"repos/{REPOSITORY}/git/tags",
                 method="POST",
                 data={
                     "tag": tag_name(version),
-                    "message": f"Release {version}",
+                    "message": f"{version} をリリース",
                     "object": plan.commit,
                     "type": "commit",
                 },
@@ -375,13 +393,11 @@ class Release:
                 method="POST",
                 data={"ref": f"refs/tags/{tag_name(version)}", "sha": tag["sha"]},
             )
-        require(
-            self.tag(version) == plan.commit, "The remote tag does not match the validated commit."
-        )
+        require(self.tag(version) == plan.commit, "リモートタグが検証済みコミットと一致しません。")
         if not plan.release:
             with tempfile.TemporaryDirectory(prefix="scoped-animation-release-") as temporary:
                 notes = Path(temporary) / "notes.md"
-                notes.write_text(plan.notes + "\n")
+                notes.write_text(plan.notes + "\n", encoding="utf-8")
                 self.run(
                     "gh",
                     "release",
@@ -399,9 +415,9 @@ class Release:
                     "--draft",
                 )
         draft = self.find_release(version)
-        require(draft, "The draft Release was not found; run publish again to resume.")
+        require(draft, "下書き Release が見つかりません。publish を再実行して再開してください。")
         self.validate_release(draft, version, plan.commit, plan.notes)
-        require(self.tag(version) == plan.commit, "The remote tag changed before publication.")
+        require(self.tag(version) == plan.commit, "公開前にリモートタグが変わりました。")
         if draft["draft"]:
             self.run(
                 "gh",
@@ -417,13 +433,17 @@ class Release:
         published = self.find_release(version)
         require(
             published,
-            "The published Release was not found; run publish again to inspect its state.",
+            "公開済み Release が見つかりません。publish を再実行して状態を確認してください。",
         )
         self.validate_release(published, version, plan.commit, plan.notes)
         require(
-            not published["draft"], "The Release is still a draft; run publish again to resume."
+            not published["draft"],
+            "Release は下書きのままです。publish を再実行して再開してください。",
         )
-        require(self.tag(version) == plan.commit, "The published tag changed; inspect the release.")
+        require(
+            self.tag(version) == plan.commit,
+            "公開したタグが変わりました。リリースを確認してください。",
+        )
         print(published["html_url"])
 
     def prepare(self, version, dry_run=False):
@@ -431,13 +451,13 @@ class Release:
         master = self.authenticate()
         require(
             self.api(f"repos/{REPOSITORY}/git/ref/tags/{tag_name(version)}", missing=True) is None,
-            "This version already has a tag.",
+            "このバージョンのタグは既にあります。",
         )
-        require(self.find_release(version) is None, "This version already has a Release.")
+        require(self.find_release(version) is None, "このバージョンの Release は既にあります。")
         self.ensure_new_version(version)
-        changelog, readme = prepare_documents(
+        changelog, readmes = prepare_documents(
             self.source(master, "CHANGELOG.md"),
-            self.source(master, "README.md"),
+            {path: self.source(master, path) for path in READMES},
             version,
             date.today(),
         )
@@ -445,40 +465,41 @@ class Release:
         branch = f"release/{version}"
         require(
             not self.git("branch", "--list", branch),
-            f"Local branch {branch} already exists; inspect the previous preparation.",
+            f"ローカルブランチ {branch} は既にあります。前回の準備を確認してください。",
         )
         require(
             self.api(f"repos/{REPOSITORY}/git/ref/heads/{branch}", missing=True) is None,
-            f"Remote branch {branch} already exists.",
+            f"リモートブランチ {branch} は既にあります。",
         )
-        print(f"Prepare {version} from {master}\n\n{notes}", flush=True)
+        print(f"{master} から {version} を準備\n\n{notes}", flush=True)
         if dry_run:
             return
         self.git("switch", "-c", branch, master)
-        (self.root / "CHANGELOG.md").write_text(changelog)
-        (self.root / "README.md").write_text(readme)
-        self.git("add", "--", "CHANGELOG.md", "README.md")
+        (self.root / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
+        for path, readme in readmes.items():
+            (self.root / path).write_text(readme, encoding="utf-8")
+        self.git("add", "--", "CHANGELOG.md", *READMES)
         self.git(
             "commit",
             "-m",
-            f"Prepare {version} release",
+            f"{version} のリリースを準備",
             "-m",
-            "Consumers need a versioned package snapshot with its compatibility contract and release notes.",
+            "利用者が互換性の契約と変更内容を確認できるよう、文書のバージョンをリリースに合わせる。",
         )
         self.remote_git("push", REMOTE, f"HEAD:refs/heads/{branch}")
-        body = f"""## Summary
+        body = f"""## 概要
 
-Prepare ScopedAnimation {version}.
+ScopedAnimation {version} のリリースを準備します。
 
 {notes}
 
-## Validation
+## 検証
 
-CI must pass before merging. Publishing also requires CI for the merged master commit.
+マージ前に CI の成功を確認してください。公開時には、マージ後の master コミットの CI 成功も必要です。
 """
         with tempfile.TemporaryDirectory(prefix="scoped-animation-release-") as temporary:
             path = Path(temporary) / "pr.md"
-            path.write_text(body)
+            path.write_text(body, encoding="utf-8")
             url = self.run(
                 "gh",
                 "pr",
@@ -490,7 +511,7 @@ CI must pass before merging. Publishing also requires CI for the merged master c
                 "--head",
                 branch,
                 "--title",
-                f"Prepare {version} release",
+                f"{version} のリリースを準備",
                 "--body-file",
                 str(path),
             )
@@ -500,11 +521,18 @@ CI must pass before merging. Publishing also requires CI for the merged master c
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("prepare", "check", "publish"):
-        subparser = subparsers.add_parser(command)
-        subparser.add_argument("version")
+    commands = {
+        "prepare": "両言語の README と変更履歴を更新し、準備 PR を作成します。",
+        "check": "対象コミット・文書・CI・公開状態を検証します。",
+        "publish": "検証後にタグと不変の GitHub Release を公開します。",
+    }
+    for command, description in commands.items():
+        subparser = subparsers.add_parser(command, help=description, description=description)
+        subparser.add_argument("version", help="安定版バージョン（例: 0.3.0）")
         if command == "prepare":
-            subparser.add_argument("--dry-run", action="store_true")
+            subparser.add_argument(
+                "--dry-run", action="store_true", help="変更せず準備内容を表示します。"
+            )
     arguments = parser.parse_args()
     release = Release(Path(__file__).resolve().parents[1])
     try:
@@ -513,12 +541,12 @@ def main():
         elif arguments.command == "check":
             plan = release.plan(arguments.version)
             print(
-                f"Ready: {REPOSITORY} {plan.version} @ {plan.commit}\nCI: {plan.ci_url}\n\n{plan.notes}"
+                f"検証完了: {REPOSITORY} {plan.version} @ {plan.commit}\nCI: {plan.ci_url}\n\n{plan.notes}"
             )
         else:
             release.publish(arguments.version)
     except (ReleaseError, OSError, ValueError) as error:
-        print(f"Release stopped: {error}", file=sys.stderr)
+        print(f"リリースを停止しました: {error}", file=sys.stderr)
         return 1
     return 0
 

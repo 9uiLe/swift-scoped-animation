@@ -3,10 +3,10 @@ import Testing
 
 @testable import ScopedAnimation
 
-@Suite("Trigger selection")
+@Suite("トリガーの選択")
 @MainActor
 struct AnimationTriggerResolutionTests {
-    @Test("Repeated snapshots preserve the pending selection until a structural change")
+    @Test("繰り返す評価は構造変更まで保留中の選択結果を保持する")
     func pendingSelection() throws {
         let initial = AnimationTriggerSnapshot(triggers: [.animation(.linear, value: 0)])
         let changed = AnimationTriggerSnapshot(triggers: [.animation(.spring, value: 1)])
@@ -25,7 +25,7 @@ struct AnimationTriggerResolutionTests {
         #expect(history.resolve(next)?.winner.index == 1)
     }
 
-    @Test("The first changed position wins regardless of the animation", arguments: 1..<8)
+    @Test("アニメーションによらず最初の変更位置を採用する", arguments: 1..<8)
     func priority(changedMask: Int) throws {
         let animations: [Animation] = [.linear, .easeIn, .spring]
         let previous = AnimationTriggerSnapshot(
@@ -51,7 +51,7 @@ struct AnimationTriggerResolutionTests {
         #endif
     }
 
-    @Test("Changing an animation alone does not trigger an update")
+    @Test("アニメーションだけの変更では更新を起動しない")
     func animationIsConfiguration() {
         let previous = AnimationTriggerSnapshot(triggers: [.animation(.linear, value: 1)])
         let current = AnimationTriggerSnapshot(triggers: [.animation(.spring, value: 1)])
@@ -61,7 +61,7 @@ struct AnimationTriggerResolutionTests {
         #expect(history.resolve(current) == nil)
     }
 
-    @Test("Equal values of different concrete types remain different triggers")
+    @Test("値が等しくても具象型の異なるトリガーは区別する")
     func erasedValueTypes() {
         let integer = AnimationTriggerSnapshot(triggers: [.animation(.linear, value: 1)])
         let optional = AnimationTriggerSnapshot(triggers: [.animation(.linear, value: Int?.some(1))]
@@ -73,7 +73,7 @@ struct AnimationTriggerResolutionTests {
         #expect(history.resolve(optional)?.winner.index == 0)
     }
 
-    @Test("Optional nil and collection values compare by value")
+    @Test("Optional の nil とコレクションは値で比較する")
     func heterogeneousValues() throws {
         let previous = AnimationTriggerSnapshot(triggers: [
             .animation(.linear, value: Int?.none),

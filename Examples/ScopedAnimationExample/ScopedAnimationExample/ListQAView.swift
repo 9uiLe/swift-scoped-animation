@@ -19,7 +19,7 @@ struct ListQAView: View {
             VStack(spacing: 12) {
                 ListQAStatusPanel(status: status)
 
-                Picker("Check", selection: $selectedCheck) {
+                Picker("検証項目", selection: $selectedCheck) {
                     ForEach(ListQACheck.allCases) { check in
                         Text(check.title).tag(check)
                     }
@@ -29,12 +29,12 @@ struct ListQAView: View {
                 .padding(.horizontal)
 
                 HStack {
-                    Button("Run selected") {
+                    Button("選択項目を実行") {
                         runRequest = ListQARun(checks: [selectedCheck])
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button("Run all") {
+                    Button("すべて実行") {
                         runRequest = ListQARun(checks: ListQACheck.allCases)
                     }
                     .buttonStyle(.bordered)
@@ -48,7 +48,7 @@ struct ListQAView: View {
                     counters: status.counters
                 )
             }
-            .navigationTitle("List QA")
+            .navigationTitle("リスト検証")
             .onAppear {
                 guard ProcessInfo.processInfo.arguments.contains("--auto-list-qa"),
                     !didStartAutomaticRun
@@ -69,7 +69,7 @@ struct ListQAView: View {
                         try await run(check, proxy: proxy)
                     }
                 } catch {
-                    // Leaving the screen cancels its task; a partial run is not a QA result.
+                    // 画面離脱でタスクがキャンセルされるため、途中結果は QA の結果として確定しません。
                 }
             }
         }
@@ -139,11 +139,11 @@ private enum ListQACheck: String, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .scope:
-            "Scope"
+            "スコープ"
         case .barrier:
-            "Barrier"
+            "バリア"
         case .reuse:
-            "Reuse"
+            "再利用"
         }
     }
 }
@@ -158,7 +158,7 @@ private struct ListQARows: View {
     var body: some View {
         switch check {
         case .scope:
-            AnimationScope(.easeInOut(duration: 0.7), value: active, name: "List wrapper") {
+            AnimationScope(.easeInOut(duration: 0.7), value: active, name: "リスト全体") {
                 List(rows.prefix(18), id: \.self) { row in
                     QAListRow(
                         row: row,
@@ -181,7 +181,7 @@ private struct ListQARows: View {
                 .animationBarrier()
             }
         case .reuse:
-            AnimationScope(.easeInOut(duration: 0.7), value: active, name: "Reuse list") {
+            AnimationScope(.easeInOut(duration: 0.7), value: active, name: "再利用リスト") {
                 List(rows, id: \.self) { row in
                     QAListRow(
                         row: row,
@@ -308,13 +308,13 @@ private struct ListQAResult: Equatable {
 
     var stateText: String {
         if isRunning {
-            "Running"
+            "実行中"
         } else if !didRun {
-            "Ready"
+            "準備完了"
         } else if passed {
-            "Pass"
+            "成功"
         } else {
-            "Check"
+            "要確認"
         }
     }
 
@@ -336,9 +336,9 @@ private struct ListQAStatusPanel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            StatusChip(title: "Scope", result: status.scope)
-            StatusChip(title: "Barrier", result: status.barrier)
-            StatusChip(title: "Reuse", result: status.reuse)
+            StatusChip(title: "スコープ", result: status.scope)
+            StatusChip(title: "バリア", result: status.barrier)
+            StatusChip(title: "再利用", result: status.reuse)
         }
         .padding(.horizontal)
         .padding(.top, 8)
@@ -383,7 +383,7 @@ private struct QAListRow: View {
                 .offset(x: active ? 18 : 0)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Row \(row)")
+                Text("行 \(row)")
                     .font(.headline)
                 RoundedRectangle(cornerRadius: 3)
                     .fill(active ? tint.opacity(0.8) : Color.gray.opacity(0.24))

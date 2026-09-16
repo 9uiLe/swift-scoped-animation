@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Report a security vulnerability
+  - name: 脆弱性の非公開報告 / Report a vulnerability privately
     url: https://github.com/9uiLe/swift-scoped-animation/security/advisories/new
-    about: Please report security issues privately, not as a public issue.
+    about: セキュリティの問題は非公開で報告してください。Please report security issues privately.
