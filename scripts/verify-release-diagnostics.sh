@@ -13,7 +13,7 @@ collect_symbols() {
 
   object_count="$(find .build -type f -path "*/${configuration}/ScopedAnimation.build/*.o" | wc -l)"
   if [[ "${object_count}" -eq 0 ]]; then
-    echo "No ${configuration} ScopedAnimation object files found" >&2
+    echo "${configuration} の ScopedAnimation オブジェクトファイルがありません" >&2
     exit 1
   fi
 
@@ -40,14 +40,14 @@ markers=(
 
 for marker in "${markers[@]}"; do
   if ! grep -q "${marker}" "${debug_dump}"; then
-    echo "DEBUG positive control is missing diagnostic marker: ${marker}" >&2
+    echo "DEBUG の存在確認で診断マーカーが見つかりません: ${marker}" >&2
     exit 1
   fi
 
   if grep -q "${marker}" "${release_dump}"; then
-    echo "RELEASE build contains diagnostic marker: ${marker}" >&2
+    echo "RELEASE に診断マーカーが残っています: ${marker}" >&2
     exit 1
   fi
 done
 
-echo "Verified: DEBUG markers are present and RELEASE diagnostics are absent."
+echo "検証完了: DEBUG のマーカーが存在し、RELEASE の診断は除去されています。"

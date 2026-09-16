@@ -104,9 +104,10 @@
       };
       buildConfigurationList = 0E1000610000000000000001 /* Build configuration list for PBXProject "ScopedAnimationExample" */;
       compatibilityVersion = "Xcode 14.0";
-      developmentRegion = en;
+      developmentRegion = ja;
       hasScannedForEncodings = 0;
       knownRegions = (
+        ja,
         en,
         Base,
       );

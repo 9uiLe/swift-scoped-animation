@@ -4,7 +4,7 @@ import Testing
 @testable import ScopedAnimation
 
 extension AnimationScopeBehaviorTests {
-    @Suite("Proxies")
+    @Suite("プロキシ")
     @MainActor
     struct Proxies {
         @Test

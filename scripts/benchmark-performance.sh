@@ -9,7 +9,7 @@ configuration="${1:-release}"
 case "${configuration}" in
   release) flags=(-O) ;;
   debug) flags=(-Onone -D DEBUG) ;;
-  *) echo 'Usage: bash scripts/benchmark-performance.sh [release|debug]' >&2; exit 2 ;;
+  *) echo '使用法: bash scripts/benchmark-performance.sh [release|debug]' >&2; exit 2 ;;
 esac
 
 benchmark_dir="$(mktemp -d)"

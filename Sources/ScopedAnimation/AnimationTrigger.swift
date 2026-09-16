@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// A value-driven animation trigger for ``AnimationScope``.
+/// ``AnimationScope`` に渡す、値とアニメーションの組です。
 ///
-/// Create triggers with ``animation(_:value:)`` and pass them to
-/// ``AnimationScope/init(name:triggers:content:)``.
+/// ``animation(_:value:)`` で作成し、
+/// ``AnimationScope/init(name:triggers:content:)`` に渡してください。
 ///
 /// ```swift
 /// AnimationScope(
@@ -24,7 +24,7 @@ public struct AnimationTrigger {
         value == other.value
     }
 
-    /// Creates a trigger that animates when `value` changes.
+    /// `value` が変わったときに使うアニメーションを宣言します。
     public static func animation(_ animation: Animation, value: some Equatable) -> AnimationTrigger
     {
         AnimationTrigger(animation: animation, value: AnyEquatable(value))

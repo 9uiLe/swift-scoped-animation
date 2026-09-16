@@ -1,10 +1,10 @@
-# Getting Started
+# 使い始める
 
-Declare an animation owner, then inspect its boundary.
+アニメーションの所有者を宣言し、その境界を確認します。
 
-## Animate a Value Change
+## 値の変更をアニメーションさせる
 
-Use a value-driven scope when a value determines whether content should animate.
+値によって内容を動かすかどうかが決まる場合は、値駆動スコープを使います。
 
 ```swift
 import ScopedAnimation
@@ -15,15 +15,15 @@ struct ExpandableCard: View {
 
     var body: some View {
         VStack {
-            Button("Toggle details") {
+            Button("詳細を切り替え") {
                 isExpanded.toggle()
             }
 
             AnimationScope(.spring(duration: 0.3), value: isExpanded, name: "Card") {
                 VStack(alignment: .leading) {
-                    Text("Revenue")
+                    Text("売上")
                     if isExpanded {
-                        Text("Monthly details")
+                        Text("月次の詳細")
                             .transition(.opacity)
                     }
                 }
@@ -33,12 +33,12 @@ struct ExpandableCard: View {
 }
 ```
 
-The scope removes incoming ancestor animation. A change to `isExpanded` supplies
-the scope's animation to the content update.
+スコープは祖先からのアニメーションを取り除きます。
+`isExpanded` が変わると、内容の更新にスコープのアニメーションを与えます。
 
-## Choose Among Several Values
+## 複数の値から選ぶ
 
-Use multiple triggers when one subtree has several animation conditions.
+1 つのサブツリーに複数のアニメーション条件がある場合は、複数トリガーを使います。
 
 ```swift
 AnimationScope(
@@ -52,18 +52,17 @@ AnimationScope(
 }
 ```
 
-The first changed trigger wins when values change together. DEBUG diagnostics
-report the ignored changes. Keep the trigger count and order stable; see
-<doc:HowItWorks> for dynamic-array behavior.
+同時に値が変わると、先頭に最も近い変更済みトリガーを採用します。DEBUG 診断は不採用の変更も報告します。
+要素数と順序は一定に保ってください。動的に変更する場合の挙動は <doc:HowItWorks> を参照してください。
 
-## Animate an Explicit Action
+## 明示的な操作をアニメーションさせる
 
-Use a proxy when an action determines which state changes should animate.
+操作によって動かす状態変更を決める場合は、プロキシを使います。
 
 ```swift
 AnimationScope(.snappy, name: "Disclosure") { scope in
     VStack {
-        Button("Toggle") {
+        Button("切り替え") {
             scope.animate {
                 isOpen.toggle()
             }
@@ -73,7 +72,7 @@ AnimationScope(.snappy, name: "Disclosure") { scope in
 }
 ```
 
-Override the default animation for one synchronous action:
+1 回の同期操作だけ、既定のアニメーションを上書きできます。
 
 ```swift
 scope.animate(.spring(duration: 0.45)) {
@@ -81,21 +80,21 @@ scope.animate(.spring(duration: 0.45)) {
 }
 ```
 
-The proxy stamps a transaction that can reach other views reading the changed
-state. Those regions need their own scope or barrier to reject its animation.
+プロキシはトランザクションにスタンプを付けます。変更した状態を読む他のビューにも届くため、
+その領域でアニメーションを拒否するには、別のスコープかバリアが必要です。
 
-## Block Incoming Animation
+## 外からのアニメーションを遮断する
 
 ```swift
 LegacyDashboard()
     .animationBarrier()
 ```
 
-A barrier strips incoming animation while retaining stamps for descendant scopes.
-It also reports unstamped incoming animation in DEBUG. Silence that warning for
-intentional legacy traffic with `animationBarrier(warnsOnLeaks: false)`.
+バリアは外からのアニメーションを取り除き、子孫のためにスタンプを保持します。
+DEBUG ではスタンプのない入力も報告します。既存コードを意図的に遮断する場合は、
+`animationBarrier(warnsOnLeaks: false)` で警告を抑制できます。
 
-## Inspect the Screen
+## 画面を確認する
 
 ```swift
 RootView()
@@ -103,10 +102,8 @@ RootView()
     .animationScopeDebugOverlay()
 ```
 
-The detector reports unstamped animation passing through that point. The overlay
-shows scope bounds and names. Both compile out of RELEASE builds.
+検出器は、その点を通過するスタンプなしアニメーションを報告します。
+オーバーレイはスコープの境界と名前を表示します。どちらも RELEASE から診断実装が除去されます。
 
-A root detector cannot see raw value animation generated below it. Put a detector
-downstream of a suspicious source when investigating that case. Continue with
-<doc:Composition> for ownership patterns and <doc:PerformancePlaybook> for cost
-and profiling guidance.
+ルートの検出器には、下で生成された直接の値アニメーションは見えません。その場合は発生源の下流に配置します。
+所有者の配置は <doc:Composition>、コストと計測方法は <doc:PerformancePlaybook> を参照してください。

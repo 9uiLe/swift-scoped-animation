@@ -4,7 +4,7 @@
     import Testing
 
     @MainActor
-    @Test("Diagnostic modifiers preserve the original view type in RELEASE")
+    @Test("RELEASE の診断修飾子は元のビュー型を保つ")
     func diagnosticModifiersAreStructuralNoOps() {
         let leakDetectorType = String(reflecting: type(of: EmptyView().detectAnimationLeaks()))
         let overlayType = String(reflecting: type(of: EmptyView().animationScopeDebugOverlay()))

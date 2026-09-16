@@ -4,7 +4,7 @@ import Testing
 @testable import ScopedAnimation
 
 extension AnimationScopeBehaviorTests {
-    @Suite("Values")
+    @Suite("値")
     @MainActor
     struct Values {
         @Test

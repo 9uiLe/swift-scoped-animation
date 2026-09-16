@@ -1,14 +1,13 @@
-# Animation Performance Playbook
+# アニメーションの性能ガイド
 
-Choose a small animated subtree and measure its cost on the target device.
+動かすサブツリーを小さくし、対象デバイスでコストを計測します。
 
-## Animation Scope and State Updates
+## スコープと状態更新
 
-A scope changes the animation carried by transactions. It does not sever state
-dependencies or guarantee fewer `body` evaluations. Views outside a scope still
-update when their inputs change.
+スコープは、トランザクションが運ぶアニメーションを変更します。
+状態依存を切ったり、`body` 評価の減少を保証したりはしません。入力が変わればスコープ外のビューも更新されます。
 
-Place a scope around the content that owns the motion:
+動きを所有する内容の周囲に配置します。
 
 ```swift
 VStack {
@@ -22,82 +21,70 @@ VStack {
 }
 ```
 
-Use barriers where incoming animation must be removed. Layout remains a separate
-responsibility: a barrier cannot keep a region stationary when ancestor layout
-moves it.
+外からのアニメーションを除去する場所にはバリアを使います。
+レイアウトは別の責務です。祖先のレイアウトが動くとき、バリアは領域をその場に固定できません。
 
-## Trigger Costs
+## トリガーのコスト
 
-A value-driven scope constructs triggers, compares their values, and applies a
-selected animation when the transaction's value gate permits it.
+値駆動スコープは、トリガーを生成して値を比較し、トランザクションの値ゲートが許可したときに選択結果を適用します。
 
-- History compares values in declaration order. RELEASE stops at the first
-  changed trigger; DEBUG inspects remaining triggers to identify conflicts.
-- An unchanged snapshot requires all values to compare equal.
-- SwiftUI's `.transaction(value:)` gate compares snapshots separately.
-- Equality depends on the supplied type. Large arrays and sets can dominate
-  bookkeeping.
-- Trigger creation includes type erasure and array/closure storage.
+- 履歴は宣言順に比較します。RELEASE は最初の変更で停止し、DEBUG は残りの競合も調べます。
+- 変更のないスナップショットでは、すべての値を比較します。
+- SwiftUI の `.transaction(value:)` も別にスナップショットを比較します。
+- 等価比較は値の型に依存します。大きな配列・集合の比較が管理処理の大半を占めることがあります。
+- 生成には型消去と配列・クロージャの記憶領域が必要です。
 
-Prefer a scalar or small domain value when it fully represents the intended
-animation condition. A revision counter is useful only if every relevant
-mutation reliably advances it. Avoid constructing large derived collections
-solely to trigger an animation.
+意図した条件を完全に表せるなら、スカラーや小さなドメイン値を使います。
+更新カウンターは、すべての該当変更で確実に進められる場合だけ有効です。
+アニメーションの起動だけのために大きな派生コレクションを作らないでください。
 
-A proxy scope uses an empty trigger snapshot. A standalone barrier requires no
-trigger history and is appropriate when only stripping is needed.
+プロキシスコープのスナップショットは空です。単独バリアにはトリガー履歴がなく、除去だけが必要な場合に適します。
 
-## DEBUG Costs
+## DEBUG のコスト
 
-Leak detectors execute transaction hooks. Place them at screen boundaries or on
-suspicious subtrees; installing one on every row multiplies observation work.
+検出器はトランザクションフックを実行します。画面の境界や調査対象のサブツリーに配置してください。
+すべての行に置くと、観測処理が増えます。
 
-Warnings are debounced with bounded storage. Suppressed warnings skip message
-formatting but still perform site lookup and locking. The overlay collects
-anchor preferences and resolves scope bounds during layout. Use it while
-inspecting ownership.
+警告は上限付きの記憶領域でデバウンスします。抑制時は整形を省きますが、検索とロックは行います。
+オーバーレイはアンカーの preference を集め、レイアウト時に境界を解決します。所有者の調査時に使用してください。
 
-Diagnostic implementations, overlay registration, and rejected-trigger storage
-compile out of RELEASE builds. Measure application performance in the
-configuration used for shipping.
+診断実装、オーバーレイ登録、不採用トリガーの記憶領域は RELEASE から除去されます。
+アプリの性能は出荷する構成で計測してください。
 
-## Visual Properties
+## 表示属性
 
-These properties usually avoid broad layout work:
+次の属性は通常、広い範囲のレイアウト処理を避けられます。
 
 - `opacity`
 - `scaleEffect`
 - `offset`
 - `rotationEffect`
 
-Measure layout-sensitive properties such as `frame`, `padding`, and `font`,
-and expensive effects such as large `blur` or `shadow`. Their cost depends on
-the content, repetition, and interaction frequency.
+`frame`・`padding`・`font` などレイアウトに影響する属性や、大きな `blur`・`shadow` は実測してください。
+コストは内容・反復数・操作頻度に依存します。
 
-## Profile the Application
+## アプリを計測する
 
-Choose the Instruments template for the execution target:
+実行対象に応じた Instruments テンプレートを使います。
 
-| Target | Template and interpretation |
+| 対象 | テンプレートと解釈 |
 | --- | --- |
-| Physical iPhone or iPad, or a macOS app on the host Mac | Use the SwiftUI template to inspect update causes and expensive view work. |
-| iOS Simulator | Use Time Profiler for CPU, hang, and hitch investigation. The SwiftUI lane is not populated, and host rendering does not establish physical-device rendering performance. |
+| iPhone/iPad 実機、またはホスト Mac 上の macOS アプリ | SwiftUI テンプレートで更新原因と高価なビュー処理を確認 |
+| iOS シミュレーター | Time Profiler で CPU・ハング・引っかかりを調査。SwiftUI レーンにはデータが入らず、ホスト描画から実機性能は判断できない |
 
-1. Reproduce a representative interaction on the target.
-2. Record body updates, layout work, CPU time, and rendering symptoms.
-3. Identify the state dependencies and subtrees involved.
-4. Change one cause and repeat the same interaction.
-5. Keep the result only when it preserves behavior and improves the relevant
-   measurement.
+1. 対象環境で代表的な操作を再現する。
+2. body 更新、レイアウト、CPU 時間、描画上の症状を記録する。
+3. 関係する状態依存とサブツリーを特定する。
+4. 原因を 1 つ変え、同じ操作を繰り返す。
+5. 挙動を維持し、対象の計測値が改善した変更だけを採用する。
 
-An animation boundary alone establishes no frame-rate or rendering-cost claim.
+境界を置いただけでは、フレームレートや描画コストの改善は主張できません。
 
-## Measure Library Bookkeeping
+## ライブラリ内部を計測する
 
-The repository's `scripts/benchmark-performance.sh` measures history resolution,
-snapshot construction and comparison, expensive equality, and suppressed DEBUG
-warnings. `Benchmarks/README.md` defines the fixtures, compiler flags, and method.
+`scripts/benchmark-performance.sh` は、履歴解決、スナップショット生成・比較、
+高価な等価比較、抑制された DEBUG 警告を計測します。
+`Benchmarks/README.md` にデータ、コンパイラ設定、手順を定義しています。
 
-Those timings measure internal CPU operations. They exclude SwiftUI updates,
-transaction propagation, layout, rendering, allocation counts, and frame
-scheduling. Use them to assess library bookkeeping alongside application traces.
+この値は内部 CPU 操作の時間です。SwiftUI の更新、伝播、レイアウト、描画、アロケーション数、
+フレームのスケジューリングは含みません。アプリのトレースと併せて内部処理を評価してください。

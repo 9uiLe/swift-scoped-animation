@@ -5,7 +5,7 @@
     @testable import ScopedAnimation
 
     extension AnimationScopeBehaviorTests {
-        @Suite("Diagnostics")
+        @Suite("診断")
         @MainActor
         struct Diagnostics {
             @Test
@@ -32,7 +32,7 @@
                 #expect(warningRecorder.warnings.count == 1)
                 #expect(
                     warningRecorder.warnings.first?.title
-                        == "AnimationScope boundary stripped another scope's animation")
+                        == "AnimationScope の境界が別スコープのアニメーションを除去しました")
                 #expect(warningRecorder.warnings.first?.message.contains("Inner") == true)
                 #expect(warningRecorder.warnings.first?.message.contains("Outer") == true)
             }
@@ -106,7 +106,7 @@
                 )
 
                 #expect(warningRecorder.warnings.count == 1)
-                #expect(warningRecorder.warnings.first?.title == "Unscoped animation transaction")
+                #expect(warningRecorder.warnings.first?.title == "スコープ未指定のアニメーショントランザクション")
             }
 
             @Test
@@ -239,7 +239,7 @@
                 #expect(warningRecorder.warnings.count == 1)
                 #expect(
                     warningRecorder.warnings.first?.title
-                        == "Animation barrier stripped an unscoped transaction")
+                        == "バリアがスコープ未指定のアニメーションを除去しました")
             }
 
             @Test
@@ -300,7 +300,7 @@
 
                 #expect(warningRecorder.warnings.count == 1)
                 #expect(
-                    warningRecorder.warnings.first?.title == "AnimationScope multi-trigger conflict"
+                    warningRecorder.warnings.first?.title == "AnimationScope の複数トリガーが競合しました"
                 )
                 #expect(warningRecorder.warnings.first?.message.contains("trigger[0]") == true)
                 #expect(warningRecorder.warnings.first?.message.contains("trigger[1]") == true)

@@ -1,41 +1,56 @@
-# Contributing
+# 貢献ガイド
 
-Read the product contract, locate the behavior you are changing, and validate it
-on the supported hosting environments.
+日本語 | [English](CONTRIBUTING.en.md)
 
-## Source of Truth
+製品の契約を読み、変更する挙動の実装箇所を確認し、対応するホスティング環境で検証してください。
 
-`HANDOFF.md` is the design source of truth. Do not change public API, semantics, or roadmap phase order without updating the design and explaining the reason in the pull request.
+## 設計の基準
 
-## Repository Map
+`HANDOFF.md` を製品スコープ・公開 API・ロードマップの唯一の設計基準とします。
+公開 API、意味論、ロードマップの順序を変える場合は設計を更新し、PR に理由を記載してください。
 
-| Path | Responsibility |
+## 言語方針
+
+- 日本語を基本言語とします。設計文書、DocC、API コメント、実装コメント、診断・エラーメッセージ、
+  サンプル UI、Issue/PR、コミットメッセージは日本語で記述します。コミットには変更の動機も残してください。
+- 海外の利用者・貢献者向けに `README.en.md`、`CONTRIBUTING.en.md`、`SECURITY.en.md`、
+  `CODE_OF_CONDUCT.en.md` を提供します。日本語版と相互リンクし、対応する変更は同じ PR で反映します。
+- 英語での Issue や PR も受け付けます。英語版を持たない設計・運用文書は日本語を参照してください。
+- API・型・変数・ファイル名・CLI サブコマンド・機械判定用の識別子は英語のまま維持します。
+  CI の必須ジョブ名、CHANGELOG の `## Unreleased` とバージョン見出し、DocC の `Overview`・`Topics`・
+  `Parameter` などの構文も維持します。
+- 実行ログ、過去の計測値、外部文書の引用は原文を保持します。`LICENSE` は MIT ライセンスの英語原文を使用します。
+- 英語 README の導入バージョンは日本語版と一致させます。リリースコマンドが両方を更新・検証します。
+
+公開文書では、ライブラリを**アニメーションの遮断と検出**として説明してください。
+状態更新やすべてのアニメーションをスコープ内に閉じ込める保証はありません。
+
+## リポジトリ構成
+
+| パス | 責務 |
 | --- | --- |
-| `Sources/ScopedAnimation/` | Scope composition, trigger resolution, boundaries, proxies, and stamps |
-| `Sources/ScopedAnimation/Diagnostics/` | DEBUG warnings, leak detection, and overlays |
-| `Sources/ScopedAnimation/Documentation.docc/` | Public API guides |
-| `Tests/ScopedAnimationTests/` | Behavioral and pure contract tests |
-| `Tests/ScopedAnimationTests/Support/` | Hosting, transaction recording, and test fixtures |
-| `Examples/ScopedAnimationExample/` | Interactive iOS sample |
-| `Examples/QA.md` | Manual QA procedure and environment-specific results |
-| `Benchmarks/` | Internal CPU measurement fixtures and method |
-| `docs/` | Compatibility assumptions, reference measurements, and validation evidence |
+| `Sources/ScopedAnimation/` | スコープの構成、トリガー解決、境界、プロキシ、スタンプ |
+| `Sources/ScopedAnimation/Diagnostics/` | DEBUG 警告、リーク検出、オーバーレイ |
+| `Sources/ScopedAnimation/Documentation.docc/` | 公開 API のガイド |
+| `Tests/ScopedAnimationTests/` | 振る舞いと純粋な契約のテスト |
+| `Tests/ScopedAnimationTests/Support/` | ホスティング、トランザクション記録、テスト用データ |
+| `Examples/ScopedAnimationExample/` | 操作できる iOS サンプル |
+| `Examples/QA.md` | 手動 QA の手順と環境ごとの結果 |
+| `Benchmarks/` | 内部 CPU コストの計測用コードと手順 |
+| `docs/` | 互換性の前提、参考計測、検証記録、リリース手順 |
 
-The [design](HANDOFF.md) defines each component's responsibility. The
-[validation record](docs/validation.md) lists measured coverage and limitations.
+[設計](HANDOFF.md)に各要素の責務を、[検証記録](docs/validation.md)に検証範囲と制約を記載しています。
 
-## Requirements
+## 開発環境
 
 - Xcode 26.x / Swift 6.3
-- SwiftPM only
-- Zero external dependencies
-- Swift 6 language mode
-- Strict concurrency enabled
-- Python 3.10+ for release-tooling tests (standard library only)
+- SwiftPM のみ、外部依存なし
+- Swift 6 言語モード、完全な厳格並行性チェック
+- リリースツールのテストには Python 3.10+（標準ライブラリのみ）
 
-## Local Checks
+## ローカルでの検証
 
-Run these before opening a pull request:
+PR を作成する前に実行してください。
 
 ```sh
 python3 -m unittest discover -s scripts/tests -v
@@ -63,59 +78,50 @@ xcodebuild build \
   -destination 'platform=iOS Simulator,name=iPhone 17'
 ```
 
-If `iPhone 17` is unavailable, use the newest available iPhone simulator and record the device name.
+`iPhone 17` がなければ、利用できる最新の iPhone シミュレーターを選び、デバイス名を記録してください。
 
-## Documentation
+## API ドキュメントと診断
 
-Public API needs DocC comments. User-facing documentation must be in English and must describe the model as blocking + detection, not total animation containment.
+公開 API には DocC コメントを付けます。診断の実装はすべて `#if DEBUG` で囲んでください。
+RELEASE 成果物からの除去を確認するときは、DEBUG には対象が存在することも確かめ、
+`strings` または `nm` でバイナリを検査します。
 
-## Diagnostics
+## テスト
 
-Diagnostics code paths must be guarded with `#if DEBUG`. When checking that code is absent from RELEASE artifacts, use a positive DEBUG control and inspect binaries with `strings` or `nm`.
+振る舞いのテストは `Tests/ScopedAnimationTests/` で契約ごとにまとめています。
+ホストビュー、モデル、トランザクション記録用の spy は `Support/` に置きます。
 
-## Tests
+Swift Testing を使ってください。ホスティングや警告の捕捉を伴うテストは、直列実行する
+`AnimationScopeBehaviorTests` スイートに追加します。ランループの更新とグローバルな警告出力先の
+差し替えを重複させないためです。ホストは保持し、`defer` で閉じてください。
 
-Behavioral tests are grouped by contract in `Tests/ScopedAnimationTests/`; their
-hosting views, models, and transaction spy live in `Support/`.
+「アニメーションしない」と主張する前に、トランザクションを観測する必要があります。
+記録が空なら失敗とし、`Animation` 値を直接比較します。所有者の検証では、同じ記録のアニメーションと
+スタンプを確認してください。トリガー選択や上限付きデバウンスの純粋なテストは、SwiftUI のホスティングに依存させません。
 
-Use Swift Testing. Add hosting and warning-capture tests under the serialized
-`AnimationScopeBehaviorTests` suite so run-loop updates and the global warning
-sink cannot overlap. Retain each host and close it with `defer`.
+## 性能計測
 
-A negative animation assertion must first observe a transaction. The recorder
-reports an issue for empty observations, and compares `Animation` values directly.
-When asserting ownership, check the animation and stamp on the same recorded
-transaction.
-Keep pure tests independent of SwiftUI hosting when they exercise selection or
-bounded debounce behavior.
+ビルドやシミュレーターを同時実行せず、`bash scripts/benchmark-performance.sh release` と
+`bash scripts/benchmark-performance.sh debug` を順番に実行します。
+[計測手順](Benchmarks/README.md)に従い、コンパイラ設定、環境、操作の定義、生の計測値を記録してください。
+内部の CPU 時間から、フレームレートやアロケーションの改善を推定しないでください。
 
-## Performance Measurements
+## リリース
 
-Run `bash scripts/benchmark-performance.sh release` and
-`bash scripts/benchmark-performance.sh debug` sequentially with no concurrent
-builds or simulator work. Follow [Benchmarks/README.md](Benchmarks/README.md).
-Record compiler flags, environment, operation definitions, and raw timings.
-Do not infer frame-rate or allocation improvements from internal CPU timings.
-
-## Releasing
-
-The owner uses local `scripts/release.py` commands to prepare a release PR,
-verify the merged source commit, and publish its annotated tag and GitHub
-Release. GitHub Actions validates commits with read-only permissions.
+所有者がローカルの `scripts/release.py` で準備 PR を作り、マージ後のコミットを検証して、
+注釈付きタグと GitHub Release を公開します。GitHub Actions は読み取り権限でコミットを検証します。
 
 ```sh
 ./scripts/release.py prepare X.Y.Z --dry-run
 ./scripts/release.py prepare X.Y.Z
-# Merge the release PR and wait for master push CI.
+# 準備 PR をマージし、master の push CI 完了を待ちます。
 ./scripts/release.py check X.Y.Z
 ./scripts/release.py publish X.Y.Z
 ```
 
-Replace `X.Y.Z` with the chosen stable version. Tags use `vX.Y.Z`.
-Publication requires both `build-test-docs` and `Release tooling checks` for
-the exact source SHA, consistent README/CHANGELOG versions, and Immutable
-releases enabled on GitHub.
+`X.Y.Z` を選んだ安定版バージョンに置き換えてください。タグは `vX.Y.Z` です。
+公開には、対象 SHA の `build-test-docs` と `Release tooling checks` の成功、
+両言語の README と CHANGELOG のバージョン一致、GitHub の Immutable releases 有効化が必要です。
 
-See [the release guide](docs/releasing.md) for authentication, repository
-protection, command behavior, and recovery. `scripts/release.sh` forwards the
-same subcommands to Python.
+認証、保護設定、コマンドの動作、再開方法は[リリース手順](docs/releasing.md)を参照してください。
+`scripts/release.sh` も同じサブコマンドを Python に渡します。

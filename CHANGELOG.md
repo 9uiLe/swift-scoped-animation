@@ -1,96 +1,76 @@
-# Changelog
+# 変更履歴
 
-All notable changes to this project will be documented in this file.
+このプロジェクトの主な変更を記録します。`Unreleased` とバージョン見出しはリリースツールが解析する固定表記です。
 
 ## Unreleased
 
-### Changed
+### 変更
 
-- Prepare releases through a versioned-document PR and publish with local owner
-  authentication only after the exact master commit passes package and
-  release-tooling CI.
-- Publish annotated `vX.Y.Z` tags and immutable, source-only GitHub Releases
-  with validated recovery from interrupted publication.
-- Run CI for every master push, including release-document changes, and disable
-  persisted checkout credentials.
-- Document the complete product contract, architecture, performance model, and
-  validation procedure for new contributors.
-- Resolve trigger history with one comparison pass and defer DEBUG warning
-  formatting until after the debounce decision.
-- Add reproducible DEBUG and RELEASE microbenchmarks for trigger resolution,
-  construction, expensive value equality, and suppressed conflict warnings.
-- Separate scope composition, value resolution, and transaction boundaries; share
-  the strip-then-restore implementation between scopes and standalone barriers.
-- Keep trigger values and animation configuration in one snapshot, pair selected
-  indices with animations, and compile rejected-trigger storage out of RELEASE.
-- Isolate trigger history to the main actor and centralize diagnostic site keys.
-- Fail CI and release verification on formatting warnings with strict linting.
-- Organize behavioral tests by contract under a serialized Swift Testing suite,
-  retain and close every hosting window, reject empty transaction observations,
-  and compare animation values directly.
-- Cover sequential and disabled updates, both transition directions, trigger
-  resizing and type changes, and the root detector's implicit-animation blind spot.
+- 日本語を基本言語とし、文書・API コメント・診断・サンプル・開発テンプレートを統一。
+  README・貢献ガイド・セキュリティ方針・行動規範には相互リンク付きの英語版を追加。
+- リリース準備で日本語・英語 README の導入バージョンを同時に更新し、公開前に両方の一致を検証。
+- バージョンを記載した文書の PR でリリースを準備し、対象 master コミットがパッケージと
+  リリースツールの CI に成功した後、所有者のローカル認証で公開。
+- 注釈付き `vX.Y.Z` タグと、ソースのみの不変な GitHub Release を公開し、中断からの再開時も状態を検証。
+- 文書更新も含めて master のすべての push で CI を実行し、チェックアウトした認証情報の永続化を無効化。
+- 新規参加者向けに製品契約、構造、性能モデル、検証手順を文書化。
+- トリガー履歴を 1 回の比較で解決し、DEBUG 警告の整形をデバウンス判定後まで遅延。
+- 解決、生成、高価な値比較、抑制された競合警告を測る DEBUG/RELEASE マイクロベンチマークを追加。
+- スコープ構成、値の解決、トランザクション境界を分離し、スコープとバリアで除去・復元の実装を共有。
+- 値とアニメーション設定を同じスナップショットに保持し、選択したインデックスとアニメーションを組にする。
+  不採用トリガーの記憶領域は RELEASE から除去。
+- トリガー履歴をメインアクターに隔離し、診断箇所のキーを一元化。
+- 厳格な lint により、フォーマット警告でも CI とリリース検証を失敗させる。
+- 振る舞いテストを契約ごとに直列の Swift Testing スイートへ整理。
+  ホストウィンドウの保持・終了、空の観測の拒否、アニメーション値の直接比較を実施。
+- 連続更新、アニメーション無効時、挿入・削除、要素数・型の変更、ルート検出器の暗黙アニメーションの死角を検証。
 
-### Fixed
+### 修正
 
-- Distinguish concrete trigger value types after type erasure, including `Int`
-  versus `Optional<Int>` values that Swift can otherwise cast to each other.
-- Prevent overlapping List QA runs and cancel pending checks when leaving the
-  screen without publishing partial results.
-- Hide decorative DEBUG scope outlines from accessibility navigation.
+- 型消去後も具象型を区別し、相互にキャスト可能な `Int` と `Optional<Int>` も別の値として扱う。
+- リスト検証の重複実行を防ぎ、画面を離れた場合は途中結果を確定せず保留中の処理をキャンセル。
+- 装飾用の DEBUG 境界線をアクセシビリティの移動対象から除外。
 
 ## 0.2.1 - 2026-07-15
 
-### Fixed
+### 修正
 
-- Select CI simulators by UDID from `simctl` JSON so device names containing
-  parentheses cannot be truncated into invalid destinations.
-- Preserve scoped content identity when a multi-trigger array changes between
-  one, two, or more entries, and avoid the previous DEBUG out-of-bounds failure
-  on trigger-count changes.
-- Resolve simultaneous trigger changes explicitly by array position and use the
-  same result for animation, stamping, and conflict diagnostics.
-- Attribute nested value-driven updates to the inner scope even when its
-  animation is equal to the ancestor animation.
+- `simctl` の JSON から UDID で CI シミュレーターを選び、括弧を含むデバイス名が切り詰められる問題を修正。
+- トリガー配列を 1 個・2 個・それ以上に変更しても内容の同一性を保持し、DEBUG の範囲外アクセスを防止。
+- 同時変更を配列位置で明示的に解決し、アニメーション・スタンプ・競合診断で同じ結果を使用。
+- 内側の値駆動更新を、祖先とアニメーションが等しい場合も内側のスコープに帰属。
 
-### Changed
+### 変更
 
-- Make `detectAnimationLeaks()` a structural no-op in RELEASE builds and audit
-  release objects for diagnostic symbols and strings in CI.
-- Bound DEBUG warning debounce storage, expire stale entries, and use stable
-  warning-kind plus scope-name keys across view remounts.
-- Derive each DEBUG overlay boundary color once per preference value instead of
-  repeating the UUID reduction during overlay rendering.
-- Remove per-transaction observable updates and actor tasks from List QA rows;
-  publish only begin and finish snapshots to the status UI, and isolate the
-  list behind narrow value inputs.
-- Record the How / What / Why / Why Not information-placement policy in the
-  repository agent instructions.
+- RELEASE の `detectAnimationLeaks()` を構造的に何もしない操作とし、CI で診断シンボル・文字列を監査。
+- DEBUG 警告のデバウンス記憶量に上限を設け、期限切れを除去し、ビュー再マウントでも種別と名前による安定したキーを使用。
+- DEBUG 境界色を preference 値ごとに一度だけ導出し、描画ごとの UUID 集計を除去。
+- List QA の行からトランザクションごとの observable 更新とアクタータスクを除去。
+  開始・終了時の状態だけを UI に反映し、リストを限定した値入力で分離。
+- 実現方法・要求する挙動・変更理由・代案を採れない理由の配置方針をエージェント指示に記載。
 
-### Documentation
+### 文書
 
-- Document empty, reordered, and dynamically resized trigger arrays and the
-  single-resolver implementation model.
-- Clarify the correct Instruments template for physical devices, the host Mac,
-  and the iOS Simulator.
+- 空・並べ替え・要素数が変わる配列と、単一リゾルバーの実装モデルを記載。
+- 実機・ホスト Mac・iOS シミュレーターに適した Instruments テンプレートを明記。
 
 ## 0.2.0 - 2026-07-05
 
-- Add multi-trigger `AnimationScope(name:triggers:)` with declaration-order conflict resolution and DEBUG `multiTriggerConflict` warnings.
-- Document nested scope semantics, composition patterns, static lint recipe, and small-app adoption guidance.
-- Add DEBUG runtime warning when an AnimationScope boundary strips another scope's stamped animation.
-- Add the GitHub social preview asset.
-- Add scripts/release.sh to automate the release flow (checks, tests, changelog rollover, tag, GitHub release).
-- CI: cancel superseded PR runs, cache SwiftPM/DerivedData build artifacts, and disable index-store generation in xcodebuild steps to cut run time.
+- 宣言順の競合解決と DEBUG の `multiTriggerConflict` 警告を持つ `AnimationScope(name:triggers:)` を追加。
+- 入れ子の意味論、構成パターン、静的 lint の例、小規模アプリへの導入指針を記載。
+- 別スコープのスタンプ付きアニメーションを除去したときの DEBUG 実行時警告を追加。
+- GitHub のソーシャルプレビュー画像を追加。
+- 検証、テスト、変更履歴の繰り越し、タグ、GitHub Release を自動化する `scripts/release.sh` を追加。
+- CI で古い PR 実行をキャンセルし、SwiftPM/DerivedData をキャッシュ、xcodebuild の index-store 生成を無効化。
 
 ## 0.1.0 - 2026-07-03
 
-- Add `AnimationScope` value-driven and proxy-driven APIs.
-- Add README demo GIF recordings from the example app screens.
-- Add `animationBarrier(warnsOnLeaks:)` for stripping incoming animation.
-- Add transaction stamping and strip-then-restore boundary semantics.
-- Add DEBUG leak detection with runtime warnings and debounce.
-- Add DEBUG scope overlay.
-- Add transaction spy behavioral tests for core semantics.
-- Add iOS example app with Before / After, overlay, and List QA screens.
-- Add DocC documentation, README, CI, MIT license, and contribution guide.
+- `AnimationScope` の値駆動・プロキシ駆動 API を追加。
+- サンプル画面を収録した README のデモ GIF を追加。
+- 外からのアニメーションを取り除く `animationBarrier(warnsOnLeaks:)` を追加。
+- トランザクションのスタンプと、除去後に復元する境界の意味論を追加。
+- 実行時警告とデバウンスを備えた DEBUG リーク検出を追加。
+- DEBUG スコープオーバーレイを追加。
+- コアの意味論に対するトランザクション spy の振る舞いテストを追加。
+- 導入前後の比較、オーバーレイ、List QA を持つ iOS サンプルを追加。
+- DocC、README、CI、MIT ライセンス、貢献ガイドを追加。

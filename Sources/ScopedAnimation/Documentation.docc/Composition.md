@@ -1,10 +1,10 @@
-# Composition
+# スコープの組み合わせ方
 
-Match each scope to the subtree that owns its animation.
+アニメーションを所有するサブツリーに合わせてスコープを配置します。
 
-## Separate Visual Layers
+## 表示レイヤーを分ける
 
-Use sibling scopes when different values control separate visual layers.
+異なる値で別々のレイヤーを動かす場合は、兄弟スコープを使います。
 
 ```swift
 VStack(spacing: 12) {
@@ -18,12 +18,11 @@ VStack(spacing: 12) {
 }
 ```
 
-Each boundary rejects animation from the other scope while its own value changes
-supply local animation.
+各境界は他方のスコープからのアニメーションを拒否し、自身の値の変更に応じてアニメーションを与えます。
 
-## Several Values in One Subtree
+## 同じサブツリーを複数の値で制御する
 
-Declare all value triggers in the scope that owns the content.
+内容を所有する 1 つのスコープに、すべての値トリガーを宣言します。
 
 ```swift
 AnimationScope(
@@ -37,24 +36,21 @@ AnimationScope(
 }
 ```
 
-The first changed array position wins when values change together. Put the
-primary motion first. A DEBUG `multiTriggerConflict` warning identifies the
-selected and ignored triggers.
+同時に値が変わると、配列の先頭に最も近い変更済みトリガーを採用します。優先する動きを先に置いてください。
+DEBUG の `multiTriggerConflict` 警告には、採用したトリガーと不採用のトリガーが含まれます。
 
-## Independent Descendant Regions
+## 子孫の領域を独立させる
 
-Nest scopes when a descendant needs its own animation boundary. The descendant
-strips ancestor animation and supplies its own when eligible. Nesting therefore
-does not combine several triggers over the same subtree.
+子孫に独立した境界が必要な場合は、スコープを入れ子にします。
+子孫は祖先のアニメーションを取り除き、条件を満たせば自身のアニメーションを与えます。
+したがって、入れ子は同じサブツリーに複数トリガーを合成する操作ではありません。
 
-A DEBUG `crossScopeAnimationStrip` warning names the scopes involved. Check
-whether the descendant should be independent, whether separate visual layers
-need sibling scopes, or whether the same subtree needs multiple triggers.
+DEBUG の `crossScopeAnimationStrip` 警告には関係するスコープ名が含まれます。
+子孫を独立させるべきか、別レイヤーなので兄弟スコープにすべきか、同じサブツリーに複数トリガーが必要かを確認します。
 
-## Stable Layout Slots
+## レイアウト領域を固定する
 
-Reserve space with ordinary SwiftUI layout and apply a barrier to the content
-that rejects incoming animation.
+通常の SwiftUI レイアウトで領域を確保し、外からのアニメーションを拒否する内容にバリアを適用します。
 
 ```swift
 ZStack {
@@ -64,32 +60,27 @@ ZStack {
 .frame(height: 50)
 ```
 
-The frame reserves height. The barrier strips incoming animation within the
-banner. Ancestor layout can still move the slot, and a downstream animation
-modifier can still generate local animation.
+フレームが高さを確保し、バリアがバナー内のアニメーションを除去します。
+祖先のレイアウト変更はこの領域を動かせます。また、下流のアニメーション修飾子は独自に動きを生成できます。
 
-A scope beneath a barrier remains functional: the barrier preserves stamps for
-matching proxy scopes, and value-driven scopes can supply their own animation.
+バリアの下のスコープも動作します。プロキシ用のスタンプは保持され、値駆動スコープも自身のアニメーションを与えられます。
 
-## Review Raw Animation Sources
+## 直接のアニメーション呼び出しを確認する
 
-Apps can adopt a policy that animation goes through scopes, with documented
-exceptions. Review both `withAnimation` and SwiftUI's view animation modifiers.
+アプリでは、例外を文書化したうえで、アニメーションをスコープ経由に統一できます。
+`withAnimation` と SwiftUI のビュー用アニメーション修飾子の両方を確認してください。
 
-Text searches for `.animation(` also match the supported
-`AnimationTrigger.animation(_:value:)` factory. Treat search results as review
-candidates; a static rule must distinguish those uses before rejecting code.
-Runtime detectors complement review but cannot see animation created below their
-installation point.
+`.animation(` の文字列検索には、サポートされる `AnimationTrigger.animation(_:value:)` も含まれます。
+検索結果はレビュー候補とし、静的ルールで拒否する前に用途を区別してください。
+実行時検出器もレビューを補助しますが、設置点より下で生成されたアニメーションは見えません。
 
-## Adopt a Screen
+## 画面に導入する
 
-1. Place `detectAnimationLeaks()` near the screen root.
-2. Give each intended animated subtree a scope.
-3. Add barriers to regions that must reject incoming animation.
-4. Enable the overlay and exercise value changes, proxy actions, and nested regions.
-5. Resolve warnings according to the intended ownership.
+1. 画面ルート付近に `detectAnimationLeaks()` を置く。
+2. 動かしたい各サブツリーにスコープを与える。
+3. 外からのアニメーションを拒否する領域にバリアを置く。
+4. オーバーレイを有効にし、値変更・プロキシ操作・入れ子を試す。
+5. 意図した所有者に合わせて警告の原因を解消する。
 
-Check shared state explicitly. A state mutation can invalidate views outside its
-animation scope, and a proxy's original transaction can reach regions without a
-boundary.
+共有状態は明示的に確認してください。状態変更はスコープ外のビューも無効化し、
+プロキシの元のトランザクションは境界のない領域にも届きます。

@@ -1,52 +1,44 @@
-# ScopedAnimation microbenchmarks
+# ScopedAnimation のマイクロベンチマーク
 
-Run from the repository root on macOS with the supported Xcode toolchain:
+対応する Xcode を用意した macOS 上で、リポジトリのルートから実行します。
 
 ```sh
 bash scripts/benchmark-performance.sh release
 bash scripts/benchmark-performance.sh debug
 ```
 
-The script compiles the library sources and benchmark in the same module so it
-can measure internal history resolution and diagnostics without adding a package
-product or dependency. RELEASE uses `-O`; DEBUG uses `-Onone -D DEBUG`. Both target
-macOS 14 or later and Swift 6. The temporary executable is removed after the run.
+ライブラリとベンチマークを同じモジュールとしてコンパイルし、パッケージ製品や依存を追加せず内部の履歴解決と診断を測ります。
+RELEASE は `-O`、DEBUG は `-Onone -D DEBUG` を使い、どちらも macOS 14 以降・Swift 6 を対象にします。
+実行後は一時実行ファイルを削除します。
 
-Each case warms up with 100 operations, then reports the minimum, median, and
-maximum of seven batches in nanoseconds per operation. The checksum consumes
-results to prevent dead-code elimination. Timing thresholds are not CI tests.
-Avoid concurrent builds, simulators, and other CPU-intensive work while measuring.
+各ケースを 100 操作でウォームアップし、7 バッチの最小値・中央値・最大値を 1 操作あたりのナノ秒で出力します。
+結果をチェックサムに使い、未使用コードとして除去されることを防ぎます。
+時間のしきい値は CI の合否判定に使いません。計測中はビルド、シミュレーターなど CPU 負荷の高い処理を避けます。
 
-Reference timings and interpretation are recorded in
-[the performance model](../docs/performance.md).
+参考値と解釈は[性能モデル](../docs/performance.md)を参照してください。
 
-## Cases
+## ケース
 
-- **History:** prebuilt snapshots alternate with no changed values, a changed
-  first trigger, or a changed last trigger. Counts 1, 2, and 8 represent small
-  configurations; 64 is a scaling stress case. Snapshot construction is excluded.
-- **Collection values:** eight independently allocated 1,024-element integer
-  arrays, with a change at the end of the last array. This isolates expensive
-  value equality and is not a typical two-scalar-trigger scope.
-- **Construction and comparison:** two new eight-trigger snapshots are built and
-  compared each iteration. This includes allocation, type erasure, and equality.
-- **Suppressed DEBUG conflicts:** eight changed triggers, with one or 64 warning
-  sites. Warmup reports each site once. A fixed injected time keeps later reports
-  inside the debounce window. The sink reads accepted messages and checks the
-  exact number of emitted warnings; console I/O is excluded from the timings.
+- **履歴**：事前生成したスナップショットを交互に使い、変更なし・先頭変更・末尾変更を測ります。
+  要素数 1・2・8 は小規模構成、64 は規模に対する負荷確認です。生成時間は含みません。
+- **コレクション値**：独立に確保した 1,024 要素の整数配列 8 個を使い、最後の配列の末尾を変えます。
+  高価な等価比較の影響を分離するもので、通常の 2 スカラートリガーとは異なります。
+- **生成と比較**：反復ごとに 8 トリガーのスナップショットを 2 個生成して比較します。
+  アロケーション、型消去、等価比較を含みます。
+- **抑制された DEBUG 競合**：8 個の変更済みトリガーと、1 または 64 個の警告箇所を使います。
+  ウォームアップで各箇所を一度報告し、注入した固定時刻で以降をデバウンス期間内に保ちます。
+  出力先は受理したメッセージを読み、警告数を厳密に確認します。コンソール I/O は計測に含みません。
 
-To compare against a saved source tree with the same internal interfaces:
+同じ内部インターフェースを持つ保存済みソースと比較する場合：
 
 ```sh
 SCOPED_ANIMATION_BENCHMARK_SOURCES=/path/to/ScopedAnimation \
   bash scripts/benchmark-performance.sh release
 ```
 
-That directory must contain the library Swift sources and its `Diagnostics/`
-subdirectory. Benchmark the two versions sequentially on the same machine using
-identical flags and fixtures. Record raw CSV output and toolchain details.
+指定先には Swift ソースと `Diagnostics/` が必要です。同じマシン・設定・データで 2 版を順に測定し、
+生の CSV とツールチェーンの詳細を記録してください。
 
-These measurements exclude SwiftUI body evaluation, transaction propagation,
-layout, rendering, and frame scheduling. Use the Performance Playbook and
-Instruments on a representative app/device to evaluate those costs. A faster
-history resolver does not imply the same percentage improvement in frame time.
+SwiftUI の body 評価、伝播、レイアウト、描画、フレームのスケジューリングは対象外です。
+それらは性能ガイドと Instruments で代表的なアプリ・デバイスを測定します。
+履歴解決の高速化率が、そのままフレーム時間の改善率になるわけではありません。

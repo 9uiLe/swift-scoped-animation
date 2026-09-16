@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// A trigger object that runs state changes with a scope-owned animation.
+/// スコープが所有するアニメーションで状態変更を実行するプロキシです。
 ///
-/// Use the proxy when an interaction should animate only the subtree inside its
-/// `AnimationScope`. Other regions must declare their own scope or barrier to block
-/// the transaction's animation; state changes still reach every view that reads them.
+/// 操作によって `AnimationScope` 内のサブツリーを動かす場合に使います。
+/// 他の領域でこのアニメーションを遮断するには、別のスコープかバリアを宣言してください。
+/// 状態変更は、その状態を読むすべてのビューに届きます。
 ///
 /// ```swift
 /// AnimationScope(.snappy) { scope in
-///     Button("Toggle") {
+///     Button("切り替え") {
 ///         scope.animate {
 ///             isExpanded.toggle()
 ///         }
@@ -24,7 +24,7 @@ public struct AnimationScopeProxy {
         self.stamp = stamp
     }
 
-    /// Runs `body` with the scope's default animation.
+    /// スコープの既定のアニメーションで `body` を実行します。
     ///
     /// ```swift
     /// scope.animate {
@@ -35,7 +35,7 @@ public struct AnimationScopeProxy {
         animate(animation, body)
     }
 
-    /// Runs `body` with a one-off animation for this trigger.
+    /// この呼び出しで指定したアニメーションで `body` を実行します。
     ///
     /// ```swift
     /// scope.animate(.spring(duration: 0.4)) {

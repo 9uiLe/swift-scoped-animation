@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from release import (
     BRANCH,
     OWNER,
+    READMES,
     REMOTE,
     REPOSITORY,
     REQUIRED_JOBS,
@@ -28,22 +29,28 @@ from release import (
     version_key,
 )
 
-UNRELEASED = f"""# Changelog
+UNRELEASED = """# 変更履歴
 
 ## Unreleased
 
-### Changed
+### 変更
 
-- Keep animation boundaries explicit.
+- アニメーションの境界を明示する。
 
 ## 0.2.0 - 2026-07-15
 
-- Previous release.
+- 過去のリリース。
 
 """
-README = f'.package(url: "{REMOTE}", from: "0.2.0")\n'
-CHANGELOG, RELEASE_README = prepare_documents(UNRELEASED, README, "0.3.0", date(2026, 9, 16))
-NOTES = "### Changed\n\n- Keep animation boundaries explicit."
+DEPENDENCY = f'.package(url: "{REMOTE}", from: "0.2.0")\n'
+PREPARE_READMES = {
+    "README.md": "# ScopedAnimation\n\n日本語の導入手順。\n\n" + DEPENDENCY,
+    "README.en.md": "# ScopedAnimation\n\nEnglish installation.\n\n" + DEPENDENCY,
+}
+CHANGELOG, RELEASE_READMES = prepare_documents(
+    UNRELEASED, PREPARE_READMES, "0.3.0", date(2026, 9, 16)
+)
+NOTES = "### 変更\n\n- アニメーションの境界を明示する。"
 
 
 def ci_run(commit):
@@ -74,7 +81,28 @@ class DocumentTests(unittest.TestCase):
         self.assertIn("## Unreleased\n\n## 0.3.0 - 2026-09-16", CHANGELOG)
         self.assertEqual(release_notes(CHANGELOG, "0.3.0"), NOTES)
         self.assertIn(UNRELEASED[UNRELEASED.index("## 0.2.0") :], CHANGELOG)
-        self.assertEqual(RELEASE_README, README.replace("0.2.0", "0.3.0"))
+        self.assertEqual(
+            RELEASE_READMES,
+            {path: content.replace("0.2.0", "0.3.0") for path, content in PREPARE_READMES.items()},
+        )
+
+    def test_each_readme_requires_one_dependency_matching_the_changelog(self):
+        for path in READMES:
+            for invalid in (
+                None,
+                "導入宣言なし",
+                PREPARE_READMES[path] * 2,
+                PREPARE_READMES[path].replace("0.2.0", "0.1.0"),
+            ):
+                readmes = dict(PREPARE_READMES)
+                if invalid is None:
+                    del readmes[path]
+                else:
+                    readmes[path] = invalid
+                with self.subTest(path=path, invalid=invalid), self.assertRaisesRegex(
+                    ReleaseError, path
+                ):
+                    prepare_documents(UNRELEASED, readmes, "0.3.0", date.today())
 
     def test_only_stable_semantic_versions_are_accepted(self):
         self.assertGreater(version_key("0.10.0"), version_key("0.9.9"))
@@ -84,24 +112,39 @@ class DocumentTests(unittest.TestCase):
 
     def test_preparation_rejects_missing_notes_ambiguous_dependency_and_old_version(self):
         cases = [
-            (UNRELEASED.replace("- Keep animation boundaries explicit.", ""), README, "0.3.0"),
-            (UNRELEASED, "no dependency", "0.3.0"),
-            (UNRELEASED, README * 2, "0.3.0"),
-            (UNRELEASED, README, "0.2.0"),
-            (UNRELEASED, README.replace("0.2.0", "0.1.0"), "0.3.0"),
-            (UNRELEASED.replace("## Unreleased", "## Changes"), README, "0.3.0"),
+            (
+                UNRELEASED.replace("- アニメーションの境界を明示する。", ""),
+                PREPARE_READMES,
+                "0.3.0",
+            ),
+            (UNRELEASED, {**PREPARE_READMES, "README.md": "導入宣言なし"}, "0.3.0"),
+            (
+                UNRELEASED,
+                {**PREPARE_READMES, "README.md": PREPARE_READMES["README.md"] * 2},
+                "0.3.0",
+            ),
+            (UNRELEASED, PREPARE_READMES, "0.2.0"),
+            (
+                UNRELEASED,
+                {
+                    **PREPARE_READMES,
+                    "README.md": PREPARE_READMES["README.md"].replace("0.2.0", "0.1.0"),
+                },
+                "0.3.0",
+            ),
+            (UNRELEASED.replace("## Unreleased", "## Changes"), PREPARE_READMES, "0.3.0"),
         ]
-        for changelog, readme, version in cases:
+        for changelog, readmes, version in cases:
             with self.subTest(
-                changelog=changelog, readme=readme, version=version
+                changelog=changelog, readmes=readmes, version=version
             ), self.assertRaises(ReleaseError):
-                prepare_documents(changelog, readme, version, date.today())
+                prepare_documents(changelog, readmes, version, date.today())
 
     def test_publication_requires_latest_release_notes_and_a_valid_date(self):
         for changelog, version in (
             (CHANGELOG, "0.2.0"),
             (CHANGELOG.replace("09-16", "02-30"), "0.3.0"),
-            (CHANGELOG.replace("- Keep animation boundaries explicit.", ""), "0.3.0"),
+            (CHANGELOG.replace("- アニメーションの境界を明示する。", ""), "0.3.0"),
         ):
             with self.subTest(version=version), self.assertRaises((ReleaseError, ValueError)):
                 release_notes(changelog, version)
@@ -116,7 +159,7 @@ class DocumentTests(unittest.TestCase):
         ]
         for changelog in candidates:
             with self.subTest(changelog=changelog), self.assertRaises(ReleaseError):
-                prepare_documents(changelog, README, "0.3.0", date.today())
+                prepare_documents(changelog, PREPARE_READMES, "0.3.0", date.today())
 
 
 class CIValidationTests(unittest.TestCase):
@@ -199,7 +242,7 @@ class SandboxRelease(Release):
         if method != "GET":
             self.writes.append((method, route, data))
             if self.fail == route:
-                raise ReleaseError("simulated network failure")
+                raise ReleaseError("模擬ネットワーク障害")
             if route == "git/tags":
                 self.tag_objects["c" * 40] = data
                 return {"sha": "c" * 40}
@@ -250,7 +293,7 @@ class SandboxRelease(Release):
         self.writes.append(arguments[:3])
         operation = arguments[2]
         if self.fail == operation:
-            raise ReleaseError("simulated network failure")
+            raise ReleaseError("模擬ネットワーク障害")
         if arguments[1:3] == ("release", "create"):
             self.releases.append(
                 dict(
@@ -302,17 +345,22 @@ class ReleaseFlowTests(unittest.TestCase):
         local.git("config", "commit.gpgsign", "false")
         local.git("remote", "add", "origin", str(self.remote))
         (self.root / "CHANGELOG.md").write_text(CHANGELOG)
-        (self.root / "README.md").write_text(RELEASE_README)
+        for path, content in RELEASE_READMES.items():
+            (self.root / path).write_text(content, encoding="utf-8")
         local.git("add", ".")
-        local.git("commit", "-m", "Fixture release")
+        local.git("commit", "-m", "テスト用リリースを作成")
         local.git("push", "origin", BRANCH)
         self.release = SandboxRelease(self.root, self.remote)
 
-    def commit_documents(self, changelog, readme):
+    def commit_documents(self, changelog, readmes):
         (self.root / "CHANGELOG.md").write_text(changelog)
-        (self.root / "README.md").write_text(readme)
+        for path in READMES:
+            if path in readmes:
+                (self.root / path).write_text(readmes[path], encoding="utf-8")
+            else:
+                (self.root / path).unlink(missing_ok=True)
         self.release.git("add", ".")
-        self.release.git("commit", "-m", "Fixture update")
+        self.release.git("commit", "-m", "テスト用文書を更新")
         self.release.git("push", "origin", BRANCH)
         self.release.master = self.release.git("rev-parse", "HEAD")
 
@@ -343,7 +391,7 @@ class ReleaseFlowTests(unittest.TestCase):
 
     def test_published_release_is_idempotent_even_after_master_advances(self):
         self.release.publish("0.3.0")
-        self.commit_documents(CHANGELOG + "\n", RELEASE_README)
+        self.commit_documents(CHANGELOG + "\n", RELEASE_READMES)
         self.release.writes.clear()
         self.release.publish("0.3.0")
         self.assertEqual(self.release.writes, [])
@@ -360,7 +408,7 @@ class ReleaseFlowTests(unittest.TestCase):
                     self.release.publish("0.3.0")
                 original = self.release.tags["v0.3.0"]
                 self.commit_documents(
-                    CHANGELOG + "\n" * (2 if operation == "edit" else 1), RELEASE_README
+                    CHANGELOG + "\n" * (2 if operation == "edit" else 1), RELEASE_READMES
                 )
                 self.release.fail = None
                 self.release.writes.clear()
@@ -382,54 +430,85 @@ class ReleaseFlowTests(unittest.TestCase):
                 self.assert_stops_without_writes()
             self.release.repository[key] = previous
         self.release.login = "someone-else"
-        self.assert_stops_without_writes("Authenticate gh")
+        self.assert_stops_without_writes("で認証してください")
         self.release.login = OWNER
         self.release.origin = "https://github.com/fork/package.git"
-        self.assert_stops_without_writes("origin must")
+        self.assert_stops_without_writes("origin は")
 
     def test_dirty_worktree_and_actions_environment_stop_before_authentication(self):
         (self.root / "untracked").write_text("change")
-        self.assert_stops_without_writes("working-tree")
+        self.assert_stops_without_writes("作業ツリー")
         self.assertEqual(self.release.reads, [])
         (self.root / "untracked").unlink()
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}):
-            self.assert_stops_without_writes("locally")
+            self.assert_stops_without_writes("ローカル")
         self.assertEqual(self.release.reads, [])
 
     def test_failed_ci_missing_jobs_and_disabled_immutability_cannot_create_tags(self):
         self.release.runs[0]["conclusion"] = "failure"
-        self.assert_stops_without_writes("has not succeeded")
+        self.assert_stops_without_writes("成功していません")
         self.release.runs[0]["conclusion"] = "success"
         jobs = self.release.jobs
         self.release.jobs = jobs[:1]
-        self.assert_stops_without_writes("must succeed")
+        self.assert_stops_without_writes("成功する必要")
         self.release.jobs = jobs
         self.release.immutable = False
         self.assert_stops_without_writes("Immutable releases")
 
     def test_unmerged_release_documents_cannot_create_tags(self):
-        self.commit_documents(UNRELEASED, README)
-        self.assert_stops_without_writes("first CHANGELOG release")
+        self.commit_documents(UNRELEASED, PREPARE_READMES)
+        self.assert_stops_without_writes("CHANGELOG の最新リリース")
 
     def test_new_unreleased_changes_cannot_be_published_under_the_prepared_version(self):
         self.commit_documents(
             CHANGELOG.replace("## Unreleased\n", "## Unreleased\n\n- Later change.\n"),
-            RELEASE_README,
+            RELEASE_READMES,
         )
-        self.assert_stops_without_writes("Unreleased must be empty")
+        self.assert_stops_without_writes("Unreleased を空に")
 
     def test_a_tag_outside_master_cannot_be_published(self):
         tree = self.release.git("rev-parse", "HEAD^{tree}")
-        self.release.tags["v0.3.0"] = self.release.git("commit-tree", tree, "-m", "Unrelated root")
+        self.release.tags["v0.3.0"] = self.release.git("commit-tree", tree, "-m", "無関係なルート")
         self.assert_stops_without_writes()
 
     def test_readme_must_install_the_release_version(self):
-        self.commit_documents(CHANGELOG, README)
+        self.commit_documents(CHANGELOG, PREPARE_READMES)
         self.assert_stops_without_writes("README")
+
+    def test_invalid_english_readme_stops_publication_before_any_remote_write(self):
+        for invalid in (
+            None,
+            "Missing dependency",
+            RELEASE_READMES["README.en.md"] * 2,
+            PREPARE_READMES["README.en.md"],
+        ):
+            readmes = dict(RELEASE_READMES)
+            if invalid is None:
+                del readmes["README.en.md"]
+            else:
+                readmes["README.en.md"] = invalid
+            self.commit_documents(CHANGELOG, readmes)
+            with self.subTest(invalid=invalid):
+                self.assert_stops_without_writes("README.en.md")
+
+    def test_stale_english_readme_stops_preparation_before_creating_a_branch(self):
+        self.commit_documents(
+            UNRELEASED,
+            {
+                **PREPARE_READMES,
+                "README.en.md": PREPARE_READMES["README.en.md"].replace("0.2.0", "0.1.0"),
+            },
+        )
+        before = self.release.git("rev-parse", "HEAD")
+        with self.assertRaisesRegex(ReleaseError, "README.en.md"):
+            self.release.prepare("0.3.0")
+        self.assertEqual(self.release.git("rev-parse", "HEAD"), before)
+        self.assertEqual(self.release.git("branch", "--show-current"), BRANCH)
+        self.assertEqual(self.release.writes, [])
 
     def test_an_existing_newer_version_prevents_publication(self):
         self.release.tags["v0.4.0"] = self.release.master
-        self.assert_stops_without_writes("newer or equal")
+        self.assert_stops_without_writes("同じか新しい")
 
     def test_existing_release_with_different_owner_commit_notes_assets_or_immutability_is_rejected(
         self,
@@ -454,7 +533,7 @@ class ReleaseFlowTests(unittest.TestCase):
         self.release.publish("0.3.0")
         self.release.tags.pop("v0.3.0")
         self.release.writes.clear()
-        self.assert_stops_without_writes("without the expected annotated tag")
+        self.assert_stops_without_writes("対応する注釈付きタグがありません")
 
     def test_a_tag_changed_or_deleted_after_validation_cannot_be_recreated(self):
         plan = self.release.plan("0.3.0")
@@ -468,11 +547,11 @@ class ReleaseFlowTests(unittest.TestCase):
         self.release.tags.pop("v0.3.0")
         self.release.master = "b" * 40
         with patch.object(self.release, "plan", return_value=plan):
-            self.assert_stops_without_writes("master changed")
+            self.assert_stops_without_writes("master が変わりました")
 
     def test_a_tag_moved_while_creating_the_draft_cannot_be_published(self):
         self.release.move_tag_on_draft = True
-        with self.assertRaisesRegex(ReleaseError, "before publication"):
+        with self.assertRaisesRegex(ReleaseError, "公開前"):
             self.release.publish("0.3.0")
         self.assertTrue(self.release.releases[0]["draft"])
         self.assertNotIn(("gh", "release", "edit"), self.release.writes)
@@ -487,7 +566,7 @@ class ReleaseFlowTests(unittest.TestCase):
             self.release.find_release("0.3.0")
 
     def test_prepare_dry_run_preserves_files_branches_and_remote_state(self):
-        self.commit_documents(UNRELEASED, README)
+        self.commit_documents(UNRELEASED, PREPARE_READMES)
         before = self.release.git("rev-parse", "HEAD")
         self.release.prepare("0.3.0", dry_run=True)
         self.assertEqual(self.release.git("rev-parse", "HEAD"), before)
@@ -496,12 +575,21 @@ class ReleaseFlowTests(unittest.TestCase):
         self.assertEqual(self.release.writes, [])
 
     def test_prepare_commits_and_pushes_versioned_documents_and_opens_a_pr(self):
-        self.commit_documents(UNRELEASED, README)
+        self.commit_documents(UNRELEASED, PREPARE_READMES)
         self.release.prepare("0.3.0")
         self.assertEqual(self.release.git("branch", "--show-current"), "release/0.3.0")
         self.assertEqual(self.release.git("status", "--porcelain"), "")
         self.assertEqual(release_notes((self.root / "CHANGELOG.md").read_text(), "0.3.0"), NOTES)
-        self.assertEqual((self.root / "README.md").read_text(), RELEASE_README)
+        for path, content in RELEASE_READMES.items():
+            self.assertEqual((self.root / path).read_text(encoding="utf-8"), content)
+        self.assertEqual(
+            set(
+                self.release.git(
+                    "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"
+                ).splitlines()
+            ),
+            {"CHANGELOG.md", *READMES},
+        )
         self.assertIn(
             self.release.git("rev-parse", "HEAD"),
             self.release.git("ls-remote", "origin", "refs/heads/release/0.3.0"),
@@ -511,7 +599,7 @@ class ReleaseFlowTests(unittest.TestCase):
         args = self.release.pr_arguments
         self.assertEqual(args[args.index("--base") + 1], BRANCH)
         self.assertEqual(args[args.index("--head") + 1], "release/0.3.0")
-        with self.assertRaisesRegex(ReleaseError, "already exists"):
+        with self.assertRaisesRegex(ReleaseError, "既にあります"):
             self.release.prepare("0.3.0")
 
     def test_tag_creation_failures_can_be_retried_without_creating_a_release_early(self):
@@ -531,7 +619,7 @@ class ReleaseFlowTests(unittest.TestCase):
         for version in ("0.3.0", "v0.4.0", "0.4.0"):
             self.release.tags[version] = self.release.master
             with self.subTest(tag=version):
-                self.assert_stops_without_writes("newer or equal")
+                self.assert_stops_without_writes("同じか新しい")
             del self.release.tags[version]
 
     def test_a_draft_cannot_bypass_failed_ci(self):
@@ -541,37 +629,37 @@ class ReleaseFlowTests(unittest.TestCase):
         self.release.fail = None
         self.release.runs[0]["conclusion"] = "failure"
         self.release.writes.clear()
-        self.assert_stops_without_writes("has not succeeded")
+        self.assert_stops_without_writes("成功していません")
 
     def test_prepare_uses_origin_master_even_when_started_on_a_feature_branch(self):
-        self.commit_documents(UNRELEASED, README)
+        self.commit_documents(UNRELEASED, PREPARE_READMES)
         master = self.release.master
         self.release.git("switch", "-c", "feature")
         (self.root / "feature-only.txt").write_text("Not part of this release.")
         self.release.git("add", ".")
-        self.release.git("commit", "-m", "Unmerged feature")
+        self.release.git("commit", "-m", "未マージの機能を追加")
         self.release.prepare("0.3.0")
         self.assertEqual(self.release.git("rev-parse", "HEAD^"), master)
         self.assertFalse((self.root / "feature-only.txt").exists())
 
     def test_prepare_rejects_existing_remote_branch_tag_or_release_without_writing(self):
-        self.commit_documents(UNRELEASED, README)
+        self.commit_documents(UNRELEASED, PREPARE_READMES)
         self.release.branches["release/0.3.0"] = {"object": {"sha": self.release.master}}
-        with self.assertRaisesRegex(ReleaseError, "Remote branch"):
+        with self.assertRaisesRegex(ReleaseError, "リモートブランチ"):
             self.release.prepare("0.3.0")
         self.release.branches.clear()
         self.release.tags["v0.3.0"] = self.release.master
-        with self.assertRaisesRegex(ReleaseError, "already has a tag"):
+        with self.assertRaisesRegex(ReleaseError, "タグは既にあります"):
             self.release.prepare("0.3.0")
         self.release.tags.pop("v0.3.0")
         self.release.releases = [{"tag_name": "v0.3.0", "draft": True}]
-        with self.assertRaisesRegex(ReleaseError, "already has a Release"):
+        with self.assertRaisesRegex(ReleaseError, "Release は既にあります"):
             self.release.prepare("0.3.0")
         self.assertEqual(self.release.writes, [])
 
     def test_publication_stops_if_workflow_is_missing_disabled_or_no_exact_run_exists(self):
         self.release.runs = []
-        self.assert_stops_without_writes("No master push")
+        self.assert_stops_without_writes("master push CI がありません")
         self.release.runs = [ci_run(self.release.master)]
         original_api = self.release.api
         for workflow in (
@@ -587,7 +675,7 @@ class ReleaseFlowTests(unittest.TestCase):
             with self.subTest(workflow=workflow), patch.object(
                 self.release, "api", side_effect=api
             ):
-                self.assert_stops_without_writes("trusted CI workflow")
+                self.assert_stops_without_writes("対象の CI ワークフロー")
 
 
 class TransportTests(unittest.TestCase):
@@ -610,7 +698,7 @@ class TransportTests(unittest.TestCase):
         with patch.object(
             release, "api", return_value={"object": {"type": "commit", "sha": "a" * 40}}
         ):
-            with self.assertRaisesRegex(ReleaseError, "annotated"):
+            with self.assertRaisesRegex(ReleaseError, "注釈付き"):
                 release.tag("0.3.0")
         with patch.object(
             release,
@@ -620,7 +708,7 @@ class TransportTests(unittest.TestCase):
                 {"tag": "v0.3.0", "object": {"type": "tag", "sha": "b" * 40}},
             ],
         ):
-            with self.assertRaisesRegex(ReleaseError, "directly"):
+            with self.assertRaisesRegex(ReleaseError, "直接"):
                 release.tag("0.3.0")
 
 

@@ -1,9 +1,9 @@
 import SwiftUI
 
 extension View {
-    /// Draws debug outlines around animation scope boundaries.
+    /// アニメーションスコープの境界に DEBUG 用の枠線を描きます。
     ///
-    /// Use the overlay while tuning scope placement in a sample app or during manual QA.
+    /// サンプルや手動 QA で、スコープの配置を確認・調整するときに使います。
     ///
     /// ```swift
     /// RootView()

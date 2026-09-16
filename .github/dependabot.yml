@@ -1,11 +1,7 @@
 version: 2
 updates:
-  # Keep GitHub Actions pinned SHAs current. Dependabot opens PRs that bump the
-  # SHA and update the trailing "# vX.Y.Z" comment, so supply-chain updates stay
-  # reviewable instead of silently tracking a mutable tag.
-  #
-  # There is no Swift/SwiftPM ecosystem entry on purpose: Package.swift declares
-  # zero external dependencies, so a "swift" ecosystem block would be dead config.
+  # GitHub Actions の固定 SHA とバージョンコメントを PR で更新し、依存先の変更をレビュー可能にします。
+  # Package.swift に外部依存がないため、Swift/SwiftPM の更新設定は不要です。
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

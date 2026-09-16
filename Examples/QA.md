@@ -1,63 +1,58 @@
-# Example app QA
+# サンプルアプリの QA
 
-Use the iOS sample to inspect behavior that hosted transaction tests cannot
-establish: rendered motion, List row propagation and reuse, overlay placement,
-and interactive controls.
+ホストテストだけでは確認できない動き、List 行への伝播と再利用、オーバーレイの位置、操作を iOS サンプルで確認します。
 
-## Run the app
+## 起動
 
-Build `Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj` with the
-`ScopedAnimationExample` scheme and an available iPhone simulator. Use a DEBUG
-build to inspect runtime warnings and outlines.
+`Examples/ScopedAnimationExample/ScopedAnimationExample.xcodeproj` を、
+`ScopedAnimationExample` スキームと利用可能な iPhone シミュレーターでビルドします。
+実行時警告と境界を確認するには DEBUG ビルドを使います。
 
-Record the date, source revision, Xcode version, device, runtime, steps, and
-observed result for every QA run. Recheck on major OS or Xcode changes.
+QA ごとに日付、ソースのリビジョン、Xcode、デバイス、ランタイム、手順、観測結果を記録してください。
+OS や Xcode のメジャー更新時は再確認します。
 
-## Procedure
+## 手順
 
-| Area | Steps | Expected result |
+| 対象 | 操作 | 期待結果 |
 | --- | --- | --- |
-| Compare | Tap `Raw update`, then `Scoped update`. | The raw panel animates unrelated status UI. The scoped panel animates its card while adjacent status UI updates without that animation. |
-| Overlay | Tap `Scoped`, then `Raw`. Scroll or resize as applicable. | Named outlines follow the scope bounds. The raw action exercises the detector. Outlines do not intercept interaction or accessibility navigation. |
-| List scope propagation | Select `Scope` and tap `Run selected`. | Visible row transactions carry scoped animation; the status reports animated and observed counts. |
-| List barrier | Select `Barrier` and run it. | Rows are observed but carry no raw incoming animation. Zero observed rows are not a passing result. |
-| List reuse | Select `Reuse`, run it, and scroll rows out of view and back before the return pulse. | Reappearing rows receive scoped animation. |
-| List run controls | Start a run and inspect the controls; leave the screen during a run and return. | Conflicting runs are disabled. Leaving cancels pending work without publishing partial success. |
-| Multi-Trigger selection | Tap board cells. | Selection animates with the first trigger's ease-out animation. |
-| Multi-Trigger hints | Tap `Show hints`. | Hints animate with the spring while selection remains unchanged. |
-| Multi-Trigger conflict | Tap `Select + hint together`. | The first trigger wins for the update and DEBUG reports `multiTriggerConflict`. |
-| Multi-Trigger reset | Tap `Reset`. | Both sets clear without stale visual state. |
+| 比較 | 「直接更新」、次に「スコープで更新」を押す | 直接更新は無関係な状態 UI も動かす。スコープ側はカードが動き、隣の状態 UI はそのアニメーションなしで更新 |
+| オーバーレイ | 「スコープ経由」、次に「直接実行」を押し、スクロールやサイズ変更を行う | 名前付き枠線が境界に追従し、直接実行で検出器が働く。操作・アクセシビリティを妨げない |
+| リストの伝播 | 「スコープ」を選び「選択項目を実行」 | 可視行にスコープのアニメーションが届き、観測数とアニメーション付きの数を表示 |
+| リストのバリア | 「バリア」を選んで実行 | 行は観測されるが、外からのアニメーションはない。観測ゼロは成功ではない |
+| リストの再利用 | 「再利用」を実行し、戻りの更新前に行を画面外へ出して戻す | 再表示した行にスコープのアニメーションが届く |
+| リストの実行制御 | 実行中の操作状態を調べ、画面を離れて戻る | 重複実行が無効。離脱時は保留中の処理をキャンセルし、途中結果を成功扱いしない |
+| 複数トリガーの選択 | 盤面のセルを押す | 最初の ease-out トリガーで選択が動く |
+| 複数トリガーのヒント | 「ヒントを表示」 | 選択は変わらず、ヒントが spring で動く |
+| 複数トリガーの競合 | 「選択とヒントを同時に変更」 | 最初のトリガーを採用し、DEBUG で `multiTriggerConflict` を報告 |
+| リセット | 「リセット」 | 両方の集合が消え、古い表示が残らない |
 
-## Recorded observations: 2026-07-14
+## 観測記録：2026-07-14
 
-Environment: iPhone 17 Simulator, iOS 26.5,
-UDID `5A6604DB-0328-4DFD-89EF-6A5EEE0CE974`.
-The source revision was not recorded. These observations do not certify every
-subsequent source state.
+環境：iPhone 17 Simulator、iOS 26.5、UDID `5A6604DB-0328-4DFD-89EF-6A5EEE0CE974`。
+ソースリビジョンは記録されていません。以後のソース状態を保証する記録ではありません。
+以下の表示名・結果は、収録時の英語 UI の原文です。README の GIF もその UI を含みます。
 
-| Check | Recorded observation | Result |
+| 確認 | 観測結果 | 判定 |
 | --- | --- | --- |
-| Compare | Raw status UI visibly animated; the scoped card animated while adjacent status UI updated without visible animation. | Pass |
-| Overlay | The outline and `Outer` label rendered; the raw probe exercised the detector placement. | Pass |
-| List scope | `Scope` displayed `Pass`, with 6/6 animated/observed row transactions. | Pass |
-| List barrier | `Barrier` displayed `Pass`, with 0/6 animated/observed row transactions. | Pass |
-| List reuse | `Reuse` displayed `Pass`, with 7/7 animated/observed row transactions after the return pulse. | Pass |
-| List run controls | No manual result recorded. | Unverified |
-| Multi-Trigger interactions | No manual result recorded. | Unverified |
+| Compare | Raw の状態 UI が動き、スコープ側はカードだけが動いて隣の状態 UI は動かなかった | 成功 |
+| Overlay | 枠線と `Outer` が表示され、Raw の操作で検出器の配置を確認 | 成功 |
+| List scope | `Scope` が `Pass` を表示し、アニメーション付き/観測が 6/6 | 成功 |
+| List barrier | `Barrier` が `Pass` を表示し、アニメーション付き/観測が 0/6 | 成功 |
+| List reuse | 戻りの更新後に `Reuse` が `Pass` を表示し、アニメーション付き/観測が 7/7 | 成功 |
+| 実行制御 | 手動結果なし | 未検証 |
+| 複数トリガー操作 | 手動結果なし | 未検証 |
 
-The List run used `--screen=list-qa --auto-list-qa`. The overlay run used
-`--screen=overlay --auto-overlay-qa`. Compare buttons were activated through
-accessibility controls.
+List は `--screen=list-qa --auto-list-qa`、Overlay は `--screen=overlay --auto-overlay-qa` で実行しました。
+Compare のボタンはアクセシビリティ操作で押しました。
 
-Local screenshot paths recorded for that run were `.build/list-qa-auto.png`,
-`.build/before-after-qa.png`, and `.build/overlay-qa.png`. These are local build
-artifacts, not distributed evidence files.
+当時のローカル画像は `.build/list-qa-auto.png`、`.build/before-after-qa.png`、`.build/overlay-qa.png` です。
+これらはローカルのビルド成果物であり、配布する証拠ファイルではありません。
 
-## Coverage limits
+## 検証の限界
 
-- Unit-hosted List row hooks may not execute; use the sample's row counters.
-- Animated transaction counts do not prove smooth rendering.
-- A successful example build does not count as manual QA.
-- Physical-device behavior requires a recorded run on the relevant device.
+- 単体テストの List 行フックは実行されない場合があるため、サンプルの行カウンターを使います。
+- アニメーション付きトランザクションの数は、滑らかな描画の証明にはなりません。
+- サンプルのビルド成功は手動 QA の代わりにはなりません。
+- 実機の挙動には、そのデバイスでの記録が必要です。
 
-Automated test and build output is recorded in [validation](../docs/validation.md).
+自動テストとビルドの出力は[検証記録](../docs/validation.md)を参照してください。

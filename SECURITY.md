@@ -1,37 +1,35 @@
-# Security Policy
+# セキュリティ方針
 
-## Reporting a Vulnerability
+日本語 | [English](SECURITY.en.md)
 
-**Please do not report security vulnerabilities through public GitHub issues,
-discussions, or pull requests.**
+## 脆弱性の報告
 
-Instead, report them privately through GitHub's built-in
-[private vulnerability reporting](https://github.com/9uiLe/swift-scoped-animation/security/advisories/new).
-This creates a confidential advisory that only the maintainer can see.
+**脆弱性は、公開の GitHub Issue・Discussion・PR で報告しないでください。**
 
-Please include, where possible:
+GitHub の[非公開の脆弱性報告](https://github.com/9uiLe/swift-scoped-animation/security/advisories/new)を使ってください。
+メンテナーが確認できる非公開のアドバイザリーが作成されます。
 
-- A description of the vulnerability and its impact
-- Steps to reproduce, or a proof of concept
-- The affected version(s), Swift/Xcode version, and platform
-- Any suggested remediation
+可能な範囲で、次の情報を含めてください。日本語・英語のどちらでも受け付けます。
 
-You can expect an initial acknowledgement within **5 business days**. If the
-issue is confirmed, we will work on a fix and coordinate a disclosure timeline
-with you before any public release.
+- 脆弱性の内容と影響
+- 再現手順、または概念実証コード
+- 影響を受けるバージョン、Swift/Xcode のバージョン、プラットフォーム
+- 修正案
 
-## Supported Versions
+原則として **5 営業日以内**に最初の受領連絡を行います。
+問題が確認された場合は修正に取り組み、公開前に報告者と開示時期を調整します。
 
-Security fixes are provided for the latest minor release line.
+## サポートするバージョン
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.2.x   | :white_check_mark: |
-| < 0.2   | :x:                |
+最新のマイナーバージョン系列にセキュリティ修正を提供します。
 
-## Scope
+| バージョン | サポート |
+| --- | --- |
+| 0.2.x | :white_check_mark: |
+| < 0.2 | :x: |
 
-ScopedAnimation is a dependency-free SwiftUI library. Its `DEBUG`-only
-diagnostics are compiled out of release builds. Reports that concern the
-runtime behavior of the library itself are in scope; reports about GitHub
-Actions workflow configuration or the example app are welcome too.
+## 対象範囲
+
+ScopedAnimation は外部依存のない SwiftUI ライブラリです。
+`DEBUG` 専用の診断は RELEASE ビルドから除去されます。
+ライブラリ本体の実行時の挙動が対象です。GitHub Actions の設定やサンプルアプリについての報告も歓迎します。

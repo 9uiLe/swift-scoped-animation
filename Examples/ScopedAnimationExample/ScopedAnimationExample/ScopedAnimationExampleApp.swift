@@ -43,7 +43,7 @@ struct ContentView: View {
                 BeforeAfterView()
             }
             .tabItem {
-                Label("Compare", systemImage: "rectangle.2.swap")
+                Label("比較", systemImage: "rectangle.2.swap")
             }
             .tag(ExampleTab.comparison)
 
@@ -51,7 +51,7 @@ struct ContentView: View {
                 OverlayDemoView()
             }
             .tabItem {
-                Label("Overlay", systemImage: "scope")
+                Label("オーバーレイ", systemImage: "scope")
             }
             .tag(ExampleTab.overlay)
 
@@ -59,7 +59,7 @@ struct ContentView: View {
                 ListQAView()
             }
             .tabItem {
-                Label("List QA", systemImage: "checklist")
+                Label("リスト検証", systemImage: "checklist")
             }
             .tag(ExampleTab.listQA)
 
@@ -67,7 +67,7 @@ struct ContentView: View {
                 MultiTriggerBoardView()
             }
             .tabItem {
-                Label("Multi-Trigger", systemImage: "square.grid.3x3")
+                Label("複数トリガー", systemImage: "square.grid.3x3")
             }
             .tag(ExampleTab.multiTrigger)
         }
